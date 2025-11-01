@@ -1,4 +1,4 @@
-import { Sidebar } from "../components/Sidebar"
+import { Sidebar } from "../SideBar"
 import { Users, AlertCircle, Clock, TrendingUp } from "lucide-react"
 
 export default function HospitalStaffDashboard() {

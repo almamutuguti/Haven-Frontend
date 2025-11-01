@@ -2,7 +2,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Menu, X, LogOut, Home, Users, BarChart3, AlertCircle, FileText, Settings } from "lucide-react"
-import { useAuth } from "../context/AuthContext"
+import { useAuth } from "./context/AuthContext"
 
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(true)
