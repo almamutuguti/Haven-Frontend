@@ -12,6 +12,9 @@ export default function LandingPage() {
   const [role, setRole] = useState("hospital_staff")
   const [authError, setAuthError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [name, setName] = useState("")
+  const [username, setUsername] = useState("")
+  const [phone, setPhone] = useState("")
   const { login, register } = useAuth()
   const navigate = useNavigate()
   const authFormRef = useRef(null)
@@ -99,75 +102,131 @@ export default function LandingPage() {
       </section>
 
       {/* Auth Section */}
-      <section ref={authFormRef} className="bg-haven-darkest text-haven-light py-20">
-        <div className="max-w-md mx-auto px-4">
-          <div className="bg-haven-dark p-8 rounded-lg shadow-xl">
-            <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? "Login" : "Register"}</h2>
+<section ref={authFormRef} className="bg-haven-darkest text-haven-light py-20">
+  <div className="max-w-md mx-auto px-4">
+    <div className="bg-haven-dark p-8 rounded-lg shadow-xl">
+      <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? "Login" : "Register"}</h2>
 
-            {authError && <div className="bg-haven-bright text-white p-3 rounded-lg mb-4 text-sm">{authError}</div>}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-                  required
-                />
-              </div>
-
-              {!isLogin && (
-                <div>
-                  <label className="block text-sm font-medium mb-2">Role</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-                  >
-                    <option value="hospital_staff">Hospital Staff</option>
-                    <option value="first_aider">First-Aider</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-haven-bright hover:bg-haven-dark text-haven-light font-semibold py-2 rounded-lg transition disabled:opacity-50"
-              >
-                {isLoading ? "Loading..." : isLogin ? "Login" : "Register"}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <p className="text-haven-cream mb-2">{isLogin ? "Don't have an account?" : "Already have an account?"}</p>
-              <button
-                onClick={() => {
-                  setIsLogin(!isLogin)
-                  setAuthError("")
-                }}
-                className="text-haven-cream hover:text-haven-light font-semibold underline"
-              >
-                {isLogin ? "Register" : "Login"}
-              </button>
-            </div>
+      {/* Error Message Display - Updated with red styling */}
+      {authError && (
+        <div className="bg-red-900 border border-red-700 text-red-100 p-4 rounded-lg mb-6 flex items-start gap-3">
+          <svg className="w-5 h-5 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+          <div>
+            <p className="font-medium">Error</p>
+            <p className="text-sm mt-1">{authError}</p>
           </div>
         </div>
-      </section>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {!isLogin && (
+          <>
+            <div>
+              <label className="block text-sm font-medium mb-2">Full Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                required
+                placeholder="John Doe"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                required
+                placeholder="johndoe"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Phone Number</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                placeholder="+1234567890 (optional)"
+              />
+            </div>
+          </>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Password</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+            required
+          />
+        </div>
+
+        {!isLogin && (
+          <div>
+            <label className="block text-sm font-medium mb-2">Role</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+            >
+              <option value="hospital_staff">Hospital Staff</option>
+              <option value="first_aider">First-Aider</option>
+              <option value="system_admin">System Admin</option>
+            </select>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full bg-haven-bright hover:bg-haven-dark text-haven-light font-semibold py-2 rounded-lg transition disabled:opacity-50"
+        >
+          {isLoading ? "Loading..." : isLogin ? "Login" : "Register"}
+        </button>
+      </form>
+
+      <div className="mt-6 text-center">
+        <p className="text-haven-cream mb-2">{isLogin ? "Don't have an account?" : "Already have an account?"}</p>
+        <button
+          onClick={() => {
+            setIsLogin(!isLogin)
+            setAuthError("")
+            // Clear form when switching
+            if (!isLogin) {
+              setName("")
+              setUsername("")
+              setPhone("")
+            }
+          }}
+          className="text-haven-cream hover:text-haven-light font-semibold underline"
+        >
+          {isLogin ? "Register" : "Login"}
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
 
       {/* Footer */}
       <footer className="bg-haven-darkest text-haven-cream text-center py-8">
