@@ -21,24 +21,39 @@ export default function LandingPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setAuthError("")
     setIsLoading(true)
+    setAuthError("") // Clear previous errors
 
     try {
       if (isLogin) {
         await login(email, password)
+        // Login successful - redirect based on role
+        const roleMap = {
+          hospital_staff: "/dashboard/hospital_staff",
+          first_aider: "/dashboard/first_aider",
+          system_admin: "/dashboard/system_admin",
+          
+        }
+        navigate(roleMap[role] || "/dashboard")
       } else {
-        await register(email, password, role)
+        // Validate required fields for registration
+        if (!name || !username) {
+          throw new Error("Full name and username are required for registration")
+        }
+        
+        await register(email, password, name, role, username, phone)
+        // Registration successful - show message and switch to login
+        alert("Registration successful! Please login with your credentials.")
+        setIsLogin(true)
+        // Clear registration fields
+        setName("")
+        setUsername("")
+        setPhone("")
       }
-      // Redirect based on role
-      const roleMap = {
-        hospital_staff: "/dashboard/hospital-staff",
-        first_aider: "/dashboard/first-aider",
-        admin: "/dashboard/admin",
-      }
-      navigate(roleMap[role] || "/")
     } catch (err) {
-      setAuthError(err.message)
+      // Set the error message to display in the UI
+      setAuthError(err.message || "An error occurred. Please try again.")
+      console.error("Authentication error:", err)
     } finally {
       setIsLoading(false)
     }
@@ -102,131 +117,131 @@ export default function LandingPage() {
       </section>
 
       {/* Auth Section */}
-<section ref={authFormRef} className="bg-haven-darkest text-haven-light py-20">
-  <div className="max-w-md mx-auto px-4">
-    <div className="bg-haven-dark p-8 rounded-lg shadow-xl">
-      <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? "Login" : "Register"}</h2>
+      <section ref={authFormRef} className="bg-haven-darkest text-haven-light py-20">
+        <div className="max-w-md mx-auto px-4">
+          <div className="bg-haven-dark p-8 rounded-lg shadow-xl">
+            <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? "Login" : "Register"}</h2>
 
-      {/* Error Message Display - Updated with red styling */}
-      {authError && (
-        <div className="bg-red-900 border border-red-700 text-red-100 p-4 rounded-lg mb-6 flex items-start gap-3">
-          <svg className="w-5 h-5 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-          </svg>
-          <div>
-            <p className="font-medium">Error</p>
-            <p className="text-sm mt-1">{authError}</p>
+            {/* Error Message Display - Updated with red styling */}
+            {authError && (
+              <div className="bg-red-900 border border-red-700 text-red-100 p-4 rounded-lg mb-6 flex items-start gap-3">
+                <svg className="w-5 h-5 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="font-medium">Error</p>
+                  <p className="text-sm mt-1">{authError}</p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Full Name</label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                      required
+                      placeholder="John Doe"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Username</label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                      required
+                      placeholder="johndoe"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Phone Number</label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                      placeholder="+1234567890 (optional)"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                  required
+                />
+              </div>
+
+              {!isLogin && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">Role</label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
+                  >
+                    <option value="hospital_staff">Hospital Staff</option>
+                    <option value="first_aider">First-Aider</option>
+                    <option value="system_admin">System Admin</option>
+                  </select>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-haven-bright hover:bg-haven-dark text-haven-light font-semibold py-2 rounded-lg transition disabled:opacity-50"
+              >
+                {isLoading ? "Loading..." : isLogin ? "Login" : "Register"}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <p className="text-haven-cream mb-2">{isLogin ? "Don't have an account?" : "Already have an account?"}</p>
+              <button
+                onClick={() => {
+                  setIsLogin(!isLogin)
+                  setAuthError("")
+                  // Clear form when switching
+                  if (!isLogin) {
+                    setName("")
+                    setUsername("")
+                    setPhone("")
+                  }
+                }}
+                className="text-haven-cream hover:text-haven-light font-semibold underline"
+              >
+                {isLogin ? "Register" : "Login"}
+              </button>
+            </div>
           </div>
         </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {!isLogin && (
-          <>
-            <div>
-              <label className="block text-sm font-medium mb-2">Full Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-                required
-                placeholder="John Doe"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-                required
-                placeholder="johndoe"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Phone Number</label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-                placeholder="+1234567890 (optional)"
-              />
-            </div>
-          </>
-        )}
-
-        <div>
-          <label className="block text-sm font-medium mb-2">Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-            required
-          />
-        </div>
-
-        {!isLogin && (
-          <div>
-            <label className="block text-sm font-medium mb-2">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-haven-darkest text-haven-light border border-haven-bright focus:outline-none focus:ring-2 focus:ring-haven-cream"
-            >
-              <option value="hospital_staff">Hospital Staff</option>
-              <option value="first_aider">First-Aider</option>
-              <option value="system_admin">System Admin</option>
-            </select>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full bg-haven-bright hover:bg-haven-dark text-haven-light font-semibold py-2 rounded-lg transition disabled:opacity-50"
-        >
-          {isLoading ? "Loading..." : isLogin ? "Login" : "Register"}
-        </button>
-      </form>
-
-      <div className="mt-6 text-center">
-        <p className="text-haven-cream mb-2">{isLogin ? "Don't have an account?" : "Already have an account?"}</p>
-        <button
-          onClick={() => {
-            setIsLogin(!isLogin)
-            setAuthError("")
-            // Clear form when switching
-            if (!isLogin) {
-              setName("")
-              setUsername("")
-              setPhone("")
-            }
-          }}
-          className="text-haven-cream hover:text-haven-light font-semibold underline"
-        >
-          {isLogin ? "Register" : "Login"}
-        </button>
-      </div>
-    </div>
-  </div>
-</section>
+      </section>
 
       {/* Footer */}
       <footer className="bg-haven-darkest text-haven-cream text-center py-8">
