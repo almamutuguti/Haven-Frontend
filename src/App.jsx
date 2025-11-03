@@ -21,7 +21,7 @@ function App() {
             }
           />
           <Route
-            path="/dashboard/first-aider"
+            path="/dashboard/first_aider"
             element={
               <ProtectedRoute role="first_aider">
                 <FirstAiderDashboard />

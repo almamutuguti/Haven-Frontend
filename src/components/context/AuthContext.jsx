@@ -164,7 +164,7 @@ export function AuthProvider({ children }) {
           },
           body: JSON.stringify({ refresh: refreshToken }),
         })
-        console.log('✅ Logout successful')
+        console.log('Logout successful')
       }
     } catch (err) {
       console.error("Logout error:", err)
