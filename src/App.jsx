@@ -13,7 +13,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route
-            path="/dashboard/hospital-staff"
+            path="/dashboard/hospital_staff"
             element={
               <ProtectedRoute role="hospital_staff">
                 <HospitalStaffDashboard />
