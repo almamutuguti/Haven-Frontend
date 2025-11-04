@@ -80,7 +80,7 @@ export function Sidebar() {
                   : "text-[#1a0000] hover:bg-[#ffe6c5]"
               }`}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
+              <Icon className="w-5 h-5 shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
             </button>
           )

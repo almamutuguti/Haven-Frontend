@@ -1,8 +1,12 @@
 "use client"
 
-import { Sidebar } from "../SideBar"
-import { Heart, Phone, AlertCircle, MapPin, Navigation, Radio, Clock, Plus, CheckCircle, AlertTriangle } from "lucide-react"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { Sidebar } from "../SideBar"
+import { 
+  Heart, Phone, AlertCircle, MapPin, Navigation, Radio, Clock, 
+  Plus, CheckCircle, AlertTriangle, X, Send, Compass 
+} from "lucide-react"
 
 export default function FirstAiderDashboard() {
   const [assignments, setAssignments] = useState([
@@ -37,6 +41,22 @@ export default function FirstAiderDashboard() {
     },
   ])
 
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formError, setFormError] = useState("")
+  const [formSuccess, setFormSuccess] = useState("")
+  
+  const [emergencyData, setEmergencyData] = useState({
+    emergency_type: "medical",
+    latitude: "",
+    longitude: "",
+    description: "",
+    address: "",
+    location_id: ""
+  })
+
+  const navigate = useNavigate()
+
   const getPriorityColor = (priority) => {
     switch (priority) {
       case "high":
@@ -63,8 +83,100 @@ export default function FirstAiderDashboard() {
     }
   }
 
+  const handleInputChange = (e) => {
+    const { name, value } = e.target
+    setEmergencyData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    setFormError("")
+    setFormSuccess("")
+  }
+
+  const getCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setEmergencyData(prev => ({
+            ...prev,
+            latitude: position.coords.latitude.toString(),
+            longitude: position.coords.longitude.toString()
+          }))
+        },
+        (error) => {
+          setFormError("Failed to get current location. Please enter coordinates manually." + error)
+        }
+      )
+    } else {
+      setFormError("Geolocation is not supported by this browser.")
+    }
+  }
+
+  const handleSubmitEmergency = async (e) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setFormError("")
+    setFormSuccess("")
+
+    try {
+      // Validate required fields
+      if (!emergencyData.latitude || !emergencyData.longitude) {
+        throw new Error("Latitude and longitude are required")
+      }
+
+      // Prepare data for API
+      const submitData = {
+        emergency_type: emergencyData.emergency_type,
+        latitude: parseFloat(emergencyData.latitude),
+        longitude: parseFloat(emergencyData.longitude),
+        description: emergencyData.description,
+        address: emergencyData.address,
+        ...(emergencyData.location_id && { location_id: parseInt(emergencyData.location_id) })
+      }
+
+      // Make API call to your backend
+      const response = await fetch('/api/emergency/alert/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: JSON.stringify(submitData)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to submit emergency alert')
+      }
+
+      const result = await response.json()
+      
+      setFormSuccess("Emergency alert submitted successfully! Redirecting to dashboard...")
+      
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
+        setShowEmergencyForm(false)
+        navigate('/dashboard/first-aider')
+      }, 2000)
+
+    } catch (error) {
+      setFormError(error.message || "An error occurred while submitting the emergency alert")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const emergencyTypes = [
+    { value: "medical", label: "Medical Emergency" },
+    { value: "traffic", label: "Traffic Accident" },
+    { value: "fire", label: "Fire Emergency" },
+    { value: "natural", label: "Natural Disaster" },
+    { value: "crime", label: "Crime in Progress" },
+    { value: "other", label: "Other Emergency" }
+  ]
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
+    <div className="min-h-screen bg-linear-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
       <Sidebar />
       
       <main className="ml-64 px-4 sm:px-6 lg:px-8 py-8">
@@ -128,7 +240,10 @@ export default function FirstAiderDashboard() {
                   <h3 className="text-2xl font-bold text-[#1a0000]">Your Assignments</h3>
                   <p className="text-[#740000]">Current and upcoming emergency calls</p>
                 </div>
-                <button className="px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium text-sm transition-colors">
+                <button 
+                  onClick={() => setShowEmergencyForm(true)}
+                  className="px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium text-sm transition-colors"
+                >
                   <Plus className="w-4 h-4 mr-2 inline" />
                   Report Incident
                 </button>
@@ -271,6 +386,191 @@ export default function FirstAiderDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Emergency Alert Form Modal */}
+        {showEmergencyForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                <h2 className="text-2xl font-bold text-[#1a0000]">Report Emergency Alert</h2>
+                <button
+                  onClick={() => setShowEmergencyForm(false)}
+                  className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-[#1a0000]" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitEmergency} className="p-6 space-y-6">
+                {formError && (
+                  <div className="p-3 bg-[#b90000]/10 border border-[#b90000]/20 rounded-lg">
+                    <p className="text-sm text-[#b90000] flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      {formError}
+                    </p>
+                  </div>
+                )}
+
+                {formSuccess && (
+                  <div className="p-3 bg-[#1a0000]/10 border border-[#1a0000]/20 rounded-lg">
+                    <p className="text-sm text-[#1a0000] flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4" />
+                      {formSuccess}
+                    </p>
+                  </div>
+                )}
+
+                {/* Emergency Type */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-[#1a0000]">
+                    Emergency Type *
+                  </label>
+                  <select
+                    name="emergency_type"
+                    value={emergencyData.emergency_type}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                    required
+                  >
+                    {emergencyTypes.map(type => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Location Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-[#1a0000]">
+                      Location Coordinates *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={getCurrentLocation}
+                      className="flex items-center gap-2 px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm transition-colors"
+                    >
+                      <Compass className="w-4 h-4" />
+                      Use Current Location
+                    </button>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-[#1a0000]">
+                        Latitude *
+                      </label>
+                      <input
+                        type="number"
+                        name="latitude"
+                        value={emergencyData.latitude}
+                        onChange={handleInputChange}
+                        step="any"
+                        min="-90"
+                        max="90"
+                        placeholder="e.g., 40.7128"
+                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-[#1a0000]">
+                        Longitude *
+                      </label>
+                      <input
+                        type="number"
+                        name="longitude"
+                        value={emergencyData.longitude}
+                        onChange={handleInputChange}
+                        step="any"
+                        min="-180"
+                        max="180"
+                        placeholder="e.g., -74.0060"
+                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-[#1a0000]">
+                    Address (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={emergencyData.address}
+                    onChange={handleInputChange}
+                    placeholder="Enter street address or location description"
+                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-[#1a0000]">
+                    Emergency Description (Optional)
+                  </label>
+                  <textarea
+                    name="description"
+                    value={emergencyData.description}
+                    onChange={handleInputChange}
+                    rows={4}
+                    placeholder="Describe the emergency situation, number of victims, conditions, etc."
+                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                  />
+                </div>
+
+                {/* Location ID */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-[#1a0000]">
+                    Location ID (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    name="location_id"
+                    value={emergencyData.location_id}
+                    onChange={handleInputChange}
+                    placeholder="Enter location ID if available"
+                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                  />
+                </div>
+
+                {/* Submit Buttons */}
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowEmergencyForm(false)}
+                    className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-[#fff3ea] border-t-transparent rounded-full animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        Submit Emergency Alert
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
