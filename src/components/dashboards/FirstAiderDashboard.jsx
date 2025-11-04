@@ -135,7 +135,7 @@ export default function FirstAiderDashboard() {
       }
 
       // Make API call to your backend
-      const response = await fetch('/api/emergency/alert/', {
+      const response = await fetch('/emergency/alert/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
