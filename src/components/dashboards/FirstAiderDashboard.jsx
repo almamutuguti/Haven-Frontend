@@ -6,7 +6,7 @@ import { Sidebar } from "../SideBar"
 import {
     Heart, Phone, AlertCircle, MapPin, Navigation, Radio, Clock,
     Plus, CheckCircle, AlertTriangle, X, Send, Compass, User,
-    Map, FileText, Stethoscope, Upload, Link
+    Map, FileText, Stethoscope, Upload, Link, Eye, Calendar
 } from "lucide-react"
 import { apiClient } from "../../utils/api"
 
@@ -16,6 +16,7 @@ export default function FirstAiderDashboard() {
     const [showEmergencyForm, setShowEmergencyForm] = useState(false)
     const [showStatusUpdateForm, setShowStatusUpdateForm] = useState(false)
     const [showVictimAssessmentForm, setShowVictimAssessmentForm] = useState(false)
+    const [showAssessmentSummary, setShowAssessmentSummary] = useState(false)
     const [selectedAssignment, setSelectedAssignment] = useState(null)
     const [selectedVictim, setSelectedVictim] = useState(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -29,6 +30,7 @@ export default function FirstAiderDashboard() {
         avgResponse: "6.5 min"
     })
 
+    // Emergency Alert Form Data
     const [emergencyData, setEmergencyData] = useState({
         emergency_type: "medical",
         latitude: "",
@@ -38,6 +40,7 @@ export default function FirstAiderDashboard() {
         location_id: ""
     })
 
+    // Status Update Form Data
     const [statusUpdateData, setStatusUpdateData] = useState({
         latitude: "",
         longitude: "",
@@ -46,35 +49,87 @@ export default function FirstAiderDashboard() {
         details: ""
     })
 
+    // Victim Assessment Form Data
     const [victimAssessment, setVictimAssessment] = useState({
+        // Personal Information
+        firstName: "",
+        lastName: "",
+        age: "",
+        gender: "",
+        contactNumber: "",
+        
+        // Vital Signs
         heartRate: "",
         bloodPressure: "",
         temperature: "",
         respiratoryRate: "",
         oxygenSaturation: "",
         gcsScore: "",
+        bloodGlucose: "",
+        
+        // Symptoms
         symptoms: [],
+        painLevel: "",
+        painLocation: "",
+        
+        // Injuries
         injuries: [],
+        injuryMechanism: "",
+        
+        // Medical Information
         medications: "",
         allergies: "",
         medicalHistory: "",
+        lastMeal: "",
+        
+        // Assessment
         condition: "stable",
-        notes: ""
+        consciousness: "alert",
+        breathing: "normal",
+        circulation: "normal",
+        
+        // Treatment
+        treatmentProvided: "",
+        medicationsAdministered: "",
+        
+        // Notes
+        notes: "",
+        recommendations: ""
     })
 
-    const navigate = useNavigate()
+    const [assessmentSummary, setAssessmentSummary] = useState(null)
+
+    // Emergency Types
+    const emergencyTypes = [
+        { value: "medical", label: "Medical Emergency" },
+        { value: "accident", label: "Accident" },
+        { value: "cardiac", label: "Cardiac Arrest" },
+        { value: "trauma", label: "Trauma" },
+        { value: "respiratory", label: "Respiratory Distress" },
+        { value: "pediatric", label: "Pediatric Emergency" },
+        { value: "other", label: "Other Emergency" }
+    ]
+
+    // Status Options
+    const statusOptions = [
+        { value: "in_progress", label: "In Progress" },
+        { value: "completed", label: "Completed" },
+        { value: "cancelled", label: "Cancelled" }
+    ]
 
     // Symptom options for checkboxes
     const symptomOptions = [
         "Chest pain", "Shortness of breath", "Dizziness", "Nausea", 
         "Headache", "Bleeding", "Fever", "Confusion", "Weakness",
-        "Abdominal pain", "Vomiting", "Seizure"
+        "Abdominal pain", "Vomiting", "Seizure", "Palpitations",
+        "Vision changes", "Difficulty speaking", "Paralysis", "Swelling"
     ]
 
     // Injury options for checkboxes
     const injuryOptions = [
         "Head injury", "Limb fracture", "Chest trauma", "Abdominal trauma",
-        "Burn", "Laceration", "Sprain", "Spinal injury", "Internal bleeding"
+        "Burn", "Laceration", "Sprain", "Spinal injury", "Internal bleeding",
+        "Dislocation", "Amputation", "Crush injury", "Penetrating injury"
     ]
 
     // Condition options
@@ -83,6 +138,61 @@ export default function FirstAiderDashboard() {
         { value: "serious", label: "Serious" },
         { value: "stable", label: "Stable" },
         { value: "guarded", label: "Guarded" }
+    ]
+
+    // Gender options
+    const genderOptions = [
+        { value: "male", label: "Male" },
+        { value: "female", label: "Female" },
+        { value: "other", label: "Other" },
+        { value: "unknown", label: "Unknown" }
+    ]
+
+    // Consciousness levels
+    const consciousnessOptions = [
+        { value: "alert", label: "Alert" },
+        { value: "verbal", label: "Responds to Verbal" },
+        { value: "pain", label: "Responds to Pain" },
+        { value: "unresponsive", label: "Unresponsive" }
+    ]
+
+    // Breathing patterns
+    const breathingOptions = [
+        { value: "normal", label: "Normal" },
+        { value: "fast", label: "Fast" },
+        { value: "slow", label: "Slow" },
+        { value: "labored", label: "Labored" },
+        { value: "absent", label: "Absent" }
+    ]
+
+    // Circulation status
+    const circulationOptions = [
+        { value: "normal", label: "Normal" },
+        { value: "weak", label: "Weak" },
+        { value: "absent", label: "Absent" },
+        { value: "irregular", label: "Irregular" }
+    ]
+
+    // Pain levels
+    const painLevelOptions = [
+        { value: "0", label: "0 - No Pain" },
+        { value: "1", label: "1" },
+        { value: "2", label: "2" },
+        { value: "3", label: "3" },
+        { value: "4", label: "4" },
+        { value: "5", label: "5 - Moderate" },
+        { value: "6", label: "6" },
+        { value: "7", label: "7" },
+        { value: "8", label: "8" },
+        { value: "9", label: "9" },
+        { value: "10", label: "10 - Worst Possible" }
+    ]
+
+    // Injury mechanisms
+    const injuryMechanismOptions = [
+        "Fall", "Motor vehicle accident", "Assault", "Sports injury",
+        "Burn", "Industrial accident", "Penetrating object", "Crush",
+        "Explosion", "Other"
     ]
 
     // Fetch active emergencies and assignments
@@ -153,7 +263,8 @@ export default function FirstAiderDashboard() {
                 vitals: generateMockVitals(emergency.emergency_type),
                 location: emergency.address || "Location not specified",
                 status: emergency.priority === "high" ? "critical" : "stable",
-                originalData: emergency
+                originalData: emergency,
+                hasAssessment: false
             }))
             
             setVictims(formattedVictims)
@@ -172,6 +283,7 @@ export default function FirstAiderDashboard() {
             vitals: { heartRate: 92, bloodPressure: "120/80", temperature: 37.2 },
             location: "Main Street & 5th Ave",
             status: "critical",
+            hasAssessment: false
         },
     ]
 
@@ -327,23 +439,54 @@ export default function FirstAiderDashboard() {
         }
     }
 
-    // Open victim assessment form
-    const handleOpenVictimAssessment = (victim) => {
+    // Open victim assessment form via plus button
+    const handleOpenVictimAssessment = (victim = null) => {
         setSelectedVictim(victim)
         setVictimAssessment({
-            heartRate: victim.vitals?.heartRate?.toString() || "",
-            bloodPressure: victim.vitals?.bloodPressure || "",
-            temperature: victim.vitals?.temperature?.toString() || "",
+            // Personal Information
+            firstName: victim?.name?.split(' ')[0] || "",
+            lastName: victim?.name?.split(' ')[1] || "",
+            age: "",
+            gender: "",
+            contactNumber: "",
+            
+            // Vital Signs
+            heartRate: victim?.vitals?.heartRate?.toString() || "",
+            bloodPressure: victim?.vitals?.bloodPressure || "",
+            temperature: victim?.vitals?.temperature?.toString() || "",
             respiratoryRate: "",
             oxygenSaturation: "",
             gcsScore: "",
+            bloodGlucose: "",
+            
+            // Symptoms
             symptoms: [],
+            painLevel: "",
+            painLocation: "",
+            
+            // Injuries
             injuries: [],
+            injuryMechanism: "",
+            
+            // Medical Information
             medications: "",
             allergies: "",
             medicalHistory: "",
-            condition: "stable",
-            notes: ""
+            lastMeal: "",
+            
+            // Assessment
+            condition: victim?.status || "stable",
+            consciousness: "alert",
+            breathing: "normal",
+            circulation: "normal",
+            
+            // Treatment
+            treatmentProvided: "",
+            medicationsAdministered: "",
+            
+            // Notes
+            notes: "",
+            recommendations: ""
         })
         setShowVictimAssessmentForm(true)
     }
@@ -368,6 +511,69 @@ export default function FirstAiderDashboard() {
         }))
     }
 
+    // Handle assessment input changes
+    const handleAssessmentInputChange = (e) => {
+        const { name, value } = e.target
+        setVictimAssessment(prev => ({ ...prev, [name]: value }))
+    }
+
+    // Generate assessment summary
+    const generateAssessmentSummary = (assessment, victim) => {
+        return {
+            victimName: `${assessment.firstName} ${assessment.lastName}`.trim() || victim?.name || "Unknown Victim",
+            timestamp: new Date().toLocaleString(),
+            personalInfo: {
+                age: assessment.age,
+                gender: assessment.gender,
+                contactNumber: assessment.contactNumber
+            },
+            vitalSigns: {
+                heartRate: assessment.heartRate,
+                bloodPressure: assessment.bloodPressure,
+                temperature: assessment.temperature,
+                respiratoryRate: assessment.respiratoryRate,
+                oxygenSaturation: assessment.oxygenSaturation,
+                gcsScore: assessment.gcsScore,
+                bloodGlucose: assessment.bloodGlucose
+            },
+            symptoms: assessment.symptoms,
+            injuries: assessment.injuries,
+            pain: {
+                level: assessment.painLevel,
+                location: assessment.painLocation
+            },
+            medicalInfo: {
+                medications: assessment.medications,
+                allergies: assessment.allergies,
+                medicalHistory: assessment.medicalHistory,
+                lastMeal: assessment.lastMeal
+            },
+            assessment: {
+                condition: assessment.condition,
+                consciousness: assessment.consciousness,
+                breathing: assessment.breathing,
+                circulation: assessment.circulation
+            },
+            treatment: {
+                provided: assessment.treatmentProvided,
+                medications: assessment.medicationsAdministered
+            },
+            notes: assessment.notes,
+            recommendations: assessment.recommendations,
+            priority: getPriorityFromCondition(assessment.condition)
+        }
+    }
+
+    const getPriorityFromCondition = (condition) => {
+        const priorityMap = {
+            critical: "High",
+            serious: "High",
+            guarded: "Medium",
+            stable: "Low"
+        }
+        return priorityMap[condition] || "Medium"
+    }
+
     // Submit victim assessment
     const handleVictimAssessment = async (e) => {
         e.preventDefault()
@@ -376,40 +582,71 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
+            // Generate assessment summary
+            const summary = generateAssessmentSummary(victimAssessment, selectedVictim)
+            setAssessmentSummary(summary)
+
             // In a real app, you would send this to your backend
             console.log('Victim assessment data:', {
-                alertId: selectedVictim.id,
-                assessment: victimAssessment
+                alertId: selectedVictim?.id,
+                assessment: victimAssessment,
+                summary: summary
             })
 
-            setFormSuccess("Victim assessment submitted successfully!")
-            
             // Update local victims data
-            setVictims(prev => prev.map(victim => 
-                victim.id === selectedVictim.id 
-                    ? { 
-                        ...victim, 
-                        vitals: {
-                            heartRate: parseInt(victimAssessment.heartRate) || victim.vitals.heartRate,
-                            bloodPressure: victimAssessment.bloodPressure || victim.vitals.bloodPressure,
-                            temperature: parseFloat(victimAssessment.temperature) || victim.vitals.temperature
-                        },
-                        status: victimAssessment.condition
-                    }
-                    : victim
-            ))
+            if (selectedVictim) {
+                setVictims(prev => prev.map(victim => 
+                    victim.id === selectedVictim.id 
+                        ? { 
+                            ...victim, 
+                            name: summary.victimName,
+                            vitals: {
+                                heartRate: parseInt(victimAssessment.heartRate) || victim.vitals.heartRate,
+                                bloodPressure: victimAssessment.bloodPressure || victim.vitals.bloodPressure,
+                                temperature: parseFloat(victimAssessment.temperature) || victim.vitals.temperature
+                            },
+                            status: victimAssessment.condition,
+                            hasAssessment: true,
+                            assessmentSummary: summary
+                        }
+                        : victim
+                ))
+            } else {
+                // Add new victim
+                const newVictim = {
+                    id: `victim-${Date.now()}`,
+                    name: summary.victimName,
+                    condition: victimAssessment.condition,
+                    vitals: {
+                        heartRate: parseInt(victimAssessment.heartRate) || 0,
+                        bloodPressure: victimAssessment.bloodPressure || "N/A",
+                        temperature: parseFloat(victimAssessment.temperature) || 0
+                    },
+                    location: "Current Location",
+                    status: victimAssessment.condition,
+                    hasAssessment: true,
+                    assessmentSummary: summary
+                }
+                setVictims(prev => [...prev, newVictim])
+            }
 
-            // Close form after 2 seconds
-            setTimeout(() => {
-                setShowVictimAssessmentForm(false)
-                setSelectedVictim(null)
-            }, 2000)
+            // Close assessment form and show summary
+            setShowVictimAssessmentForm(false)
+            setShowAssessmentSummary(true)
 
         } catch (error) {
             console.error('Victim assessment failed:', error)
             setFormError("Failed to submit victim assessment")
         } finally {
             setIsSubmitting(false)
+        }
+    }
+
+    // View assessment summary
+    const handleViewAssessmentSummary = (victim) => {
+        if (victim.assessmentSummary) {
+            setAssessmentSummary(victim.assessmentSummary)
+            setShowAssessmentSummary(true)
         }
     }
 
@@ -469,11 +706,6 @@ export default function FirstAiderDashboard() {
     const handleStatusInputChange = (e) => {
         const { name, value } = e.target
         setStatusUpdateData(prev => ({ ...prev, [name]: value }))
-    }
-
-    const handleAssessmentInputChange = (e) => {
-        const { name, value } = e.target
-        setVictimAssessment(prev => ({ ...prev, [name]: value }))
     }
 
     const getCurrentLocation = () => {
@@ -551,16 +783,6 @@ export default function FirstAiderDashboard() {
             setIsSubmitting(false)
         }
     }
-
-    const emergencyTypes = [
-        { value: "medical", label: "Medical Emergency" },
-        { value: "accident", label: "Accident" },
-        { value: "cardiac", label: "Cardiac Arrest" },
-        { value: "trauma", label: "Trauma" },
-        { value: "respiratory", label: "Respiratory Distress" },
-        { value: "pediatric", label: "Pediatric Emergency" },
-        { value: "other", label: "Other Emergency" }
-    ]
 
     if (isLoading) {
         return (
@@ -722,8 +944,19 @@ export default function FirstAiderDashboard() {
                         {/* Victims Section */}
                         <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
                             <div className="p-6 border-b border-[#ffe6c5]">
-                                <h3 className="text-2xl font-bold text-[#1a0000]">Victim Information</h3>
-                                <p className="text-[#740000]">Current patient information</p>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-[#1a0000]">Victim Information</h3>
+                                        <p className="text-[#740000]">Current patient information</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleOpenVictimAssessment()}
+                                        className="p-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg transition-colors"
+                                        title="Add New Victim Assessment"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
                             <div className="p-6">
                                 <div className="space-y-4">
@@ -731,6 +964,13 @@ export default function FirstAiderDashboard() {
                                         <div className="text-center py-4">
                                             <User className="w-8 h-8 text-[#740000]/50 mx-auto mb-2" />
                                             <p className="text-[#740000] text-sm">No victim data available</p>
+                                            <button
+                                                onClick={() => handleOpenVictimAssessment()}
+                                                className="mt-2 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
+                                            >
+                                                <Plus className="w-4 h-4 mr-1 inline" />
+                                                Add First Assessment
+                                            </button>
                                         </div>
                                     ) : (
                                         victims.map((victim) => (
@@ -743,6 +983,12 @@ export default function FirstAiderDashboard() {
                                                     <div>
                                                         <h4 className="font-semibold text-[#1a0000]">{victim.name}</h4>
                                                         <p className="text-xs text-[#740000]">{victim.condition}</p>
+                                                        {victim.hasAssessment && (
+                                                            <div className="flex items-center gap-1 mt-1">
+                                                                <CheckCircle className="w-3 h-3 text-[#1a0000]" />
+                                                                <span className="text-xs text-[#1a0000]">Assessment Complete</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <span
@@ -753,13 +999,25 @@ export default function FirstAiderDashboard() {
                                                         >
                                                             {victim.status.charAt(0).toUpperCase() + victim.status.slice(1)}
                                                         </span>
-                                                        <button
-                                                            onClick={() => handleOpenVictimAssessment(victim)}
-                                                            className="p-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-xs transition-colors"
-                                                            title="Assess Victim"
-                                                        >
-                                                            <Stethoscope className="w-3 h-3" />
-                                                        </button>
+                                                        <div className="flex gap-1">
+                                                            {victim.hasAssessment ? (
+                                                                <button
+                                                                    onClick={() => handleViewAssessmentSummary(victim)}
+                                                                    className="p-1 border border-[#1a0000] text-[#1a0000] hover:bg-[#ffe6c5] rounded text-xs transition-colors"
+                                                                    title="View Assessment Summary"
+                                                                >
+                                                                    <Eye className="w-3 h-3" />
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleOpenVictimAssessment(victim)}
+                                                                    className="p-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-xs transition-colors"
+                                                                    title="Assess Victim"
+                                                                >
+                                                                    <Plus className="w-3 h-3" />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="space-y-2 text-xs text-[#740000]">
@@ -777,13 +1035,23 @@ export default function FirstAiderDashboard() {
                                                     </div>
                                                 </div>
                                                 <div className="mt-3 pt-3 border-t border-[#ffe6c5]">
-                                                    <button
-                                                        onClick={() => handleOpenVictimAssessment(victim)}
-                                                        className="w-full px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                                    >
-                                                        <Stethoscope className="w-3 h-3" />
-                                                        Assess Victim
-                                                    </button>
+                                                    {victim.hasAssessment ? (
+                                                        <button
+                                                            onClick={() => handleViewAssessmentSummary(victim)}
+                                                            className="w-full px-3 py-1 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                        >
+                                                            <Eye className="w-3 h-3" />
+                                                            View Assessment Summary
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleOpenVictimAssessment(victim)}
+                                                            className="w-full px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                        >
+                                                            <Stethoscope className="w-3 h-3" />
+                                                            Assess Victim
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))
@@ -1147,9 +1415,11 @@ export default function FirstAiderDashboard() {
                                             className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                                             disabled={isSubmitting}
                                         >
-                                            <option value="in_progress">In Progress</option>
-                                            <option value="completed">Completed</option>
-                                            <option value="cancelled">Cancelled</option>
+                                            {statusOptions.map(option => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
 
@@ -1203,11 +1473,13 @@ export default function FirstAiderDashboard() {
                 )}
 
                 {/* Victim Assessment Form Modal */}
-                {showVictimAssessmentForm && selectedVictim && (
+                {showVictimAssessmentForm && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                             <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
-                                <h2 className="text-2xl font-bold text-[#1a0000]">Victim Assessment</h2>
+                                <h2 className="text-2xl font-bold text-[#1a0000]">
+                                    {selectedVictim ? `Assess Victim: ${selectedVictim.name}` : 'New Victim Assessment'}
+                                </h2>
                                 <button
                                     onClick={() => setShowVictimAssessmentForm(false)}
                                     className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
@@ -1236,235 +1508,530 @@ export default function FirstAiderDashboard() {
                                     </div>
                                 )}
 
-                                <div className="bg-[#ffe6c5] p-4 rounded-lg">
-                                    <h3 className="font-semibold text-[#1a0000] mb-2">Victim Information</h3>
-                                    <p className="text-[#740000]">{selectedVictim.name} - {selectedVictim.condition}</p>
-                                    <p className="text-[#740000] text-sm">Location: {selectedVictim.location}</p>
+                                {/* Personal Information */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Personal Information</h3>
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                First Name *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="firstName"
+                                                value={victimAssessment.firstName}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                required
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Last Name *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="lastName"
+                                                value={victimAssessment.lastName}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                required
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Age
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="age"
+                                                value={victimAssessment.age}
+                                                onChange={handleAssessmentInputChange}
+                                                min="0"
+                                                max="120"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Gender
+                                            </label>
+                                            <select
+                                                name="gender"
+                                                value={victimAssessment.gender}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                <option value="">Select Gender</option>
+                                                {genderOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Contact Number
+                                            </label>
+                                            <input
+                                                type="tel"
+                                                name="contactNumber"
+                                                value={victimAssessment.contactNumber}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="Phone number"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Vital Signs */}
-                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Heart Rate (bpm)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="heartRate"
-                                            value={victimAssessment.heartRate}
-                                            onChange={handleAssessmentInputChange}
-                                            placeholder="e.g., 72"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Blood Pressure
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="bloodPressure"
-                                            value={victimAssessment.bloodPressure}
-                                            onChange={handleAssessmentInputChange}
-                                            placeholder="e.g., 120/80"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Temperature (°C)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="temperature"
-                                            value={victimAssessment.temperature}
-                                            onChange={handleAssessmentInputChange}
-                                            step="0.1"
-                                            placeholder="e.g., 36.6"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Respiratory Rate
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="respiratoryRate"
-                                            value={victimAssessment.respiratoryRate}
-                                            onChange={handleAssessmentInputChange}
-                                            placeholder="e.g., 16"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            O2 Saturation (%)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="oxygenSaturation"
-                                            value={victimAssessment.oxygenSaturation}
-                                            onChange={handleAssessmentInputChange}
-                                            min="0"
-                                            max="100"
-                                            placeholder="e.g., 98"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            GCS Score
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="gcsScore"
-                                            value={victimAssessment.gcsScore}
-                                            onChange={handleAssessmentInputChange}
-                                            min="3"
-                                            max="15"
-                                            placeholder="e.g., 15"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Symptoms Checkboxes */}
-                                <div className="space-y-3">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
-                                        Symptoms
-                                    </label>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                        {symptomOptions.map(symptom => (
-                                            <label key={symptom} className="flex items-center space-x-2">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={victimAssessment.symptoms.includes(symptom)}
-                                                    onChange={() => handleSymptomChange(symptom)}
-                                                    className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
-                                                    disabled={isSubmitting}
-                                                />
-                                                <span className="text-sm text-[#1a0000]">{symptom}</span>
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Vital Signs</h3>
+                                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Heart Rate (bpm)
                                             </label>
-                                        ))}
-                                    </div>
-                                </div>
+                                            <input
+                                                type="number"
+                                                name="heartRate"
+                                                value={victimAssessment.heartRate}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="e.g., 72"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
 
-                                {/* Injuries Checkboxes */}
-                                <div className="space-y-3">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
-                                        Injuries
-                                    </label>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                        {injuryOptions.map(injury => (
-                                            <label key={injury} className="flex items-center space-x-2">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={victimAssessment.injuries.includes(injury)}
-                                                    onChange={() => handleInjuryChange(injury)}
-                                                    className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
-                                                    disabled={isSubmitting}
-                                                />
-                                                <span className="text-sm text-[#1a0000]">{injury}</span>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Blood Pressure
                                             </label>
-                                        ))}
+                                            <input
+                                                type="text"
+                                                name="bloodPressure"
+                                                value={victimAssessment.bloodPressure}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="e.g., 120/80"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Temperature (°C)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="temperature"
+                                                value={victimAssessment.temperature}
+                                                onChange={handleAssessmentInputChange}
+                                                step="0.1"
+                                                placeholder="e.g., 36.6"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Respiratory Rate
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="respiratoryRate"
+                                                value={victimAssessment.respiratoryRate}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="e.g., 16"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                O2 Saturation (%)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="oxygenSaturation"
+                                                value={victimAssessment.oxygenSaturation}
+                                                onChange={handleAssessmentInputChange}
+                                                min="0"
+                                                max="100"
+                                                placeholder="e.g., 98"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                GCS Score
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="gcsScore"
+                                                value={victimAssessment.gcsScore}
+                                                onChange={handleAssessmentInputChange}
+                                                min="3"
+                                                max="15"
+                                                placeholder="e.g., 15"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Blood Glucose (mg/dL)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="bloodGlucose"
+                                                value={victimAssessment.bloodGlucose}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="e.g., 100"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Medical Information */}
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
+                                {/* Symptoms & Pain Assessment */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Symptoms & Pain Assessment</h3>
+                                    
+                                    <div className="space-y-3">
                                         <label className="block text-sm font-medium text-[#1a0000]">
-                                            Current Medications
+                                            Symptoms
                                         </label>
-                                        <input
-                                            type="text"
-                                            name="medications"
-                                            value={victimAssessment.medications}
-                                            onChange={handleAssessmentInputChange}
-                                            placeholder="List current medications"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            {symptomOptions.map(symptom => (
+                                                <label key={symptom} className="flex items-center space-x-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={victimAssessment.symptoms.includes(symptom)}
+                                                        onChange={() => handleSymptomChange(symptom)}
+                                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                                        disabled={isSubmitting}
+                                                    />
+                                                    <span className="text-sm text-[#1a0000]">{symptom}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
 
-                                    <div className="space-y-2">
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Pain Level (0-10)
+                                            </label>
+                                            <select
+                                                name="painLevel"
+                                                value={victimAssessment.painLevel}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                <option value="">Select Pain Level</option>
+                                                {painLevelOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Pain Location
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="painLocation"
+                                                value={victimAssessment.painLocation}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="Where is the pain located?"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Injuries */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Injuries</h3>
+                                    
+                                    <div className="space-y-3">
                                         <label className="block text-sm font-medium text-[#1a0000]">
-                                            Allergies
+                                            Injuries Observed
                                         </label>
-                                        <input
-                                            type="text"
-                                            name="allergies"
-                                            value={victimAssessment.allergies}
-                                            onChange={handleAssessmentInputChange}
-                                            placeholder="List known allergies"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            {injuryOptions.map(injury => (
+                                                <label key={injury} className="flex items-center space-x-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={victimAssessment.injuries.includes(injury)}
+                                                        onChange={() => handleInjuryChange(injury)}
+                                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                                        disabled={isSubmitting}
+                                                    />
+                                                    <span className="text-sm text-[#1a0000]">{injury}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
-                                        Medical History
-                                    </label>
-                                    <textarea
-                                        name="medicalHistory"
-                                        value={victimAssessment.medicalHistory}
-                                        onChange={handleAssessmentInputChange}
-                                        rows={2}
-                                        placeholder="Relevant medical history"
-                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
-                                        disabled={isSubmitting}
-                                    />
-                                </div>
-
-                                {/* Condition Assessment */}
-                                <div className="grid md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="block text-sm font-medium text-[#1a0000]">
-                                            Current Condition
+                                            Injury Mechanism
                                         </label>
                                         <select
-                                            name="condition"
-                                            value={victimAssessment.condition}
+                                            name="injuryMechanism"
+                                            value={victimAssessment.injuryMechanism}
                                             onChange={handleAssessmentInputChange}
                                             className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                                             disabled={isSubmitting}
                                         >
-                                            {conditionOptions.map(option => (
-                                                <option key={option.value} value={option.value}>
-                                                    {option.label}
+                                            <option value="">Select Injury Mechanism</option>
+                                            {injuryMechanismOptions.map(option => (
+                                                <option key={option} value={option}>
+                                                    {option}
                                                 </option>
                                             ))}
                                         </select>
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
-                                        Assessment Notes
-                                    </label>
-                                    <textarea
-                                        name="notes"
-                                        value={victimAssessment.notes}
-                                        onChange={handleAssessmentInputChange}
-                                        rows={3}
-                                        placeholder="Additional observations, treatment provided, recommendations..."
-                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
-                                        disabled={isSubmitting}
-                                    />
+                                {/* Medical Information */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Medical Information</h3>
+                                    
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Current Medications
+                                            </label>
+                                            <textarea
+                                                name="medications"
+                                                value={victimAssessment.medications}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={2}
+                                                placeholder="List current medications"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Allergies
+                                            </label>
+                                            <textarea
+                                                name="allergies"
+                                                value={victimAssessment.allergies}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={2}
+                                                placeholder="List known allergies"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Medical History
+                                        </label>
+                                        <textarea
+                                            name="medicalHistory"
+                                            value={victimAssessment.medicalHistory}
+                                            onChange={handleAssessmentInputChange}
+                                            rows={2}
+                                            placeholder="Relevant medical history (diabetes, heart conditions, etc.)"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Last Meal
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="lastMeal"
+                                            value={victimAssessment.lastMeal}
+                                            onChange={handleAssessmentInputChange}
+                                            placeholder="When and what did they last eat/drink?"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Assessment */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Clinical Assessment</h3>
+                                    
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Level of Consciousness
+                                            </label>
+                                            <select
+                                                name="consciousness"
+                                                value={victimAssessment.consciousness}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                {consciousnessOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Breathing
+                                            </label>
+                                            <select
+                                                name="breathing"
+                                                value={victimAssessment.breathing}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                {breathingOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Circulation
+                                            </label>
+                                            <select
+                                                name="circulation"
+                                                value={victimAssessment.circulation}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                {circulationOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Overall Condition
+                                            </label>
+                                            <select
+                                                name="condition"
+                                                value={victimAssessment.condition}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                {conditionOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Treatment Provided */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Treatment Provided</h3>
+                                    
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Treatment Provided
+                                        </label>
+                                        <textarea
+                                            name="treatmentProvided"
+                                            value={victimAssessment.treatmentProvided}
+                                            onChange={handleAssessmentInputChange}
+                                            rows={3}
+                                            placeholder="Describe treatment provided (CPR, bandaging, splinting, etc.)"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Medications Administered
+                                        </label>
+                                        <textarea
+                                            name="medicationsAdministered"
+                                            value={victimAssessment.medicationsAdministered}
+                                            onChange={handleAssessmentInputChange}
+                                            rows={2}
+                                            placeholder="List any medications administered"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Notes & Recommendations */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-[#1a0000] border-b border-[#ffe6c5] pb-2">Notes & Recommendations</h3>
+                                    
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Assessment Notes
+                                        </label>
+                                        <textarea
+                                            name="notes"
+                                            value={victimAssessment.notes}
+                                            onChange={handleAssessmentInputChange}
+                                            rows={3}
+                                            placeholder="Additional observations, findings, etc."
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Recommendations
+                                        </label>
+                                        <textarea
+                                            name="recommendations"
+                                            value={victimAssessment.recommendations}
+                                            onChange={handleAssessmentInputChange}
+                                            rows={2}
+                                            placeholder="Recommendations for further care"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
                                 </div>
 
                                 {/* Submit Buttons */}
@@ -1496,6 +2063,247 @@ export default function FirstAiderDashboard() {
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Assessment Summary Modal */}
+                {showAssessmentSummary && assessmentSummary && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Assessment Summary</h2>
+                                <button
+                                    onClick={() => setShowAssessmentSummary(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                {/* Victim Info */}
+                                <div className="bg-[#ffe6c5] p-4 rounded-lg">
+                                    <h3 className="font-semibold text-[#1a0000] text-lg mb-2">{assessmentSummary.victimName}</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-[#740000]">Assessment Time:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.timestamp}</p>
+                                        </div>
+                                        {assessmentSummary.personalInfo.age && (
+                                            <div>
+                                                <span className="text-[#740000]">Age:</span>
+                                                <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.age}</p>
+                                            </div>
+                                        )}
+                                        {assessmentSummary.personalInfo.gender && (
+                                            <div>
+                                                <span className="text-[#740000]">Gender:</span>
+                                                <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.gender}</p>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <span className="text-[#740000]">Priority:</span>
+                                            <p className={`font-medium ${assessmentSummary.priority === 'High' ? 'text-[#b90000]' : assessmentSummary.priority === 'Medium' ? 'text-[#740000]' : 'text-[#1a0000]'}`}>
+                                                {assessmentSummary.priority}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Vital Signs */}
+                                <div className="space-y-4">
+                                    <h3 className="font-semibold text-[#1a0000] text-lg">Vital Signs</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        {Object.entries(assessmentSummary.vitalSigns).map(([key, value]) => (
+                                            value && (
+                                                <div key={key} className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg p-3">
+                                                    <p className="text-sm text-[#740000] capitalize">
+                                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                                    </p>
+                                                    <p className="text-lg font-semibold text-[#1a0000]">{value}</p>
+                                                </div>
+                                            )
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Clinical Assessment */}
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div className="space-y-3">
+                                        <h3 className="font-semibold text-[#1a0000]">Clinical Assessment</h3>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-[#740000]">Consciousness:</span>
+                                                <span className="text-[#1a0000] font-medium">{assessmentSummary.assessment.consciousness}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#740000]">Breathing:</span>
+                                                <span className="text-[#1a0000] font-medium">{assessmentSummary.assessment.breathing}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#740000]">Circulation:</span>
+                                                <span className="text-[#1a0000] font-medium">{assessmentSummary.assessment.circulation}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#740000]">Condition:</span>
+                                                <span className={`font-medium ${assessmentSummary.assessment.condition === 'critical' ? 'text-[#b90000]' : assessmentSummary.assessment.condition === 'serious' ? 'text-[#b90000]' : assessmentSummary.assessment.condition === 'guarded' ? 'text-[#740000]' : 'text-[#1a0000]'}`}>
+                                                    {assessmentSummary.assessment.condition}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Pain Assessment */}
+                                    {(assessmentSummary.pain.level || assessmentSummary.pain.location) && (
+                                        <div className="space-y-3">
+                                            <h3 className="font-semibold text-[#1a0000]">Pain Assessment</h3>
+                                            <div className="space-y-2">
+                                                {assessmentSummary.pain.level && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-[#740000]">Pain Level:</span>
+                                                        <span className="text-[#1a0000] font-medium">{assessmentSummary.pain.level}/10</span>
+                                                    </div>
+                                                )}
+                                                {assessmentSummary.pain.location && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-[#740000]">Location:</span>
+                                                        <span className="text-[#1a0000] font-medium">{assessmentSummary.pain.location}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Symptoms & Injuries */}
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {/* Symptoms */}
+                                    <div className="space-y-3">
+                                        <h3 className="font-semibold text-[#1a0000]">Symptoms</h3>
+                                        {assessmentSummary.symptoms.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {assessmentSummary.symptoms.map((symptom, index) => (
+                                                    <span key={index} className="px-2 py-1 bg-[#b90000]/10 text-[#b90000] rounded-full text-xs border border-[#b90000]/20">
+                                                        {symptom}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[#740000] text-sm">No symptoms reported</p>
+                                        )}
+                                    </div>
+
+                                    {/* Injuries */}
+                                    <div className="space-y-3">
+                                        <h3 className="font-semibold text-[#1a0000]">Injuries</h3>
+                                        {assessmentSummary.injuries.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {assessmentSummary.injuries.map((injury, index) => (
+                                                    <span key={index} className="px-2 py-1 bg-[#740000]/10 text-[#740000] rounded-full text-xs border border-[#740000]/20">
+                                                        {injury}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[#740000] text-sm">No injuries reported</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Medical Information */}
+                                {(assessmentSummary.medicalInfo.medications || assessmentSummary.medicalInfo.allergies || assessmentSummary.medicalInfo.medicalHistory || assessmentSummary.medicalInfo.lastMeal) && (
+                                    <div className="space-y-4">
+                                        <h3 className="font-semibold text-[#1a0000] text-lg">Medical Information</h3>
+                                        <div className="grid md:grid-cols-2 gap-4">
+                                            {assessmentSummary.medicalInfo.medications && (
+                                                <div>
+                                                    <p className="text-sm text-[#740000]">Medications</p>
+                                                    <p className="text-[#1a0000]">{assessmentSummary.medicalInfo.medications}</p>
+                                                </div>
+                                            )}
+                                            {assessmentSummary.medicalInfo.allergies && (
+                                                <div>
+                                                    <p className="text-sm text-[#740000]">Allergies</p>
+                                                    <p className="text-[#1a0000]">{assessmentSummary.medicalInfo.allergies}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {assessmentSummary.medicalInfo.medicalHistory && (
+                                            <div>
+                                                <p className="text-sm text-[#740000]">Medical History</p>
+                                                <p className="text-[#1a0000]">{assessmentSummary.medicalInfo.medicalHistory}</p>
+                                            </div>
+                                        )}
+                                        {assessmentSummary.medicalInfo.lastMeal && (
+                                            <div>
+                                                <p className="text-sm text-[#740000]">Last Meal</p>
+                                                <p className="text-[#1a0000]">{assessmentSummary.medicalInfo.lastMeal}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Treatment Provided */}
+                                {(assessmentSummary.treatment.provided || assessmentSummary.treatment.medications) && (
+                                    <div className="space-y-4">
+                                        <h3 className="font-semibold text-[#1a0000] text-lg">Treatment Provided</h3>
+                                        {assessmentSummary.treatment.provided && (
+                                            <div>
+                                                <p className="text-sm text-[#740000]">Treatment</p>
+                                                <p className="text-[#1a0000]">{assessmentSummary.treatment.provided}</p>
+                                            </div>
+                                        )}
+                                        {assessmentSummary.treatment.medications && (
+                                            <div>
+                                                <p className="text-sm text-[#740000]">Medications Administered</p>
+                                                <p className="text-[#1a0000]">{assessmentSummary.treatment.medications}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Notes & Recommendations */}
+                                {(assessmentSummary.notes || assessmentSummary.recommendations) && (
+                                    <div className="space-y-4">
+                                        <h3 className="font-semibold text-[#1a0000] text-lg">Notes & Recommendations</h3>
+                                        {assessmentSummary.notes && (
+                                            <div>
+                                                <p className="text-sm text-[#740000]">Assessment Notes</p>
+                                                <p className="text-[#1a0000] bg-[#fff3ea] border border-[#ffe6c5] rounded-lg p-3">
+                                                    {assessmentSummary.notes}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {assessmentSummary.recommendations && (
+                                            <div>
+                                                <p className="text-sm text-[#740000]">Recommendations</p>
+                                                <p className="text-[#1a0000] bg-[#fff3ea] border border-[#ffe6c5] rounded-lg p-3">
+                                                    {assessmentSummary.recommendations}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        onClick={() => setShowAssessmentSummary(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Close Summary
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowAssessmentSummary(false);
+                                            setShowVictimAssessmentForm(true);
+                                        }}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors"
+                                    >
+                                        Edit Assessment
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
