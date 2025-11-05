@@ -6,19 +6,25 @@ import { Sidebar } from "../SideBar"
 import {
     Heart, Phone, AlertCircle, MapPin, Navigation, Radio, Clock,
     Plus, CheckCircle, AlertTriangle, X, Send, Compass, User,
-    Map, FileText, Stethoscope, Upload, Link, Eye, Calendar
+    Map, FileText, Stethoscope, Upload, Link, Eye, Calendar,
+    MessageCircle, Building, Ambulance
 } from "lucide-react"
 import { apiClient } from "../../utils/api"
 
 export default function FirstAiderDashboard() {
     const [assignments, setAssignments] = useState([])
     const [victims, setVictims] = useState([])
+    const [hospitalCommunications, setHospitalCommunications] = useState([])
+    const [hospitals, setHospitals] = useState([])
     const [showEmergencyForm, setShowEmergencyForm] = useState(false)
     const [showStatusUpdateForm, setShowStatusUpdateForm] = useState(false)
     const [showVictimAssessmentForm, setShowVictimAssessmentForm] = useState(false)
     const [showAssessmentSummary, setShowAssessmentSummary] = useState(false)
+    const [showHospitalCommunicationForm, setShowHospitalCommunicationForm] = useState(false)
+    const [showCommunicationStatusForm, setShowCommunicationStatusForm] = useState(false)
     const [selectedAssignment, setSelectedAssignment] = useState(null)
     const [selectedVictim, setSelectedVictim] = useState(null)
+    const [selectedCommunication, setSelectedCommunication] = useState(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [formError, setFormError] = useState("")
     const [formSuccess, setFormSuccess] = useState("")
@@ -27,7 +33,7 @@ export default function FirstAiderDashboard() {
         activeAssignments: 0,
         highPriority: 0,
         victimsAssisted: 0,
-        avgResponse: "6.5 min"
+        activeCommunications: 0
     })
 
     // Emergency Alert Form Data
@@ -64,7 +70,9 @@ export default function FirstAiderDashboard() {
         temperature: "",
         respiratoryRate: "",
         oxygenSaturation: "",
-        gcsScore: "",
+        gcs_eyes: "",
+        gcs_verbal: "",
+        gcs_motor: "",
         bloodGlucose: "",
         
         // Symptoms
@@ -87,6 +95,7 @@ export default function FirstAiderDashboard() {
         consciousness: "alert",
         breathing: "normal",
         circulation: "normal",
+        triage_category: "delayed",
         
         // Treatment
         treatmentProvided: "",
@@ -95,6 +104,29 @@ export default function FirstAiderDashboard() {
         // Notes
         notes: "",
         recommendations: ""
+    })
+
+    // Hospital Communication Form Data
+    const [hospitalCommunicationData, setHospitalCommunicationData] = useState({
+        emergency_alert_id: "",
+        hospital: "",
+        priority: "high",
+        victim_name: "",
+        victim_age: "",
+        victim_gender: "",
+        chief_complaint: "",
+        vital_signs: "",
+        first_aid_provided: "",
+        estimated_arrival_minutes: "15",
+        required_specialties: "",
+        equipment_needed: "",
+        blood_type_required: ""
+    })
+
+    // Communication Status Update Data
+    const [communicationStatusData, setCommunicationStatusData] = useState({
+        status: "sent",
+        notes: ""
     })
 
     const [assessmentSummary, setAssessmentSummary] = useState(null)
@@ -115,6 +147,34 @@ export default function FirstAiderDashboard() {
         { value: "in_progress", label: "In Progress" },
         { value: "completed", label: "Completed" },
         { value: "cancelled", label: "Cancelled" }
+    ]
+
+    // Communication Status Options
+    const communicationStatusOptions = [
+        { value: "sent", label: "Sent" },
+        { value: "acknowledged", label: "Acknowledged" },
+        { value: "preparing", label: "Preparing" },
+        { value: "ready", label: "Ready" },
+        { value: "en_route", label: "En Route" },
+        { value: "arrived", label: "Arrived" },
+        { value: "completed", label: "Completed" },
+        { value: "cancelled", label: "Cancelled" }
+    ]
+
+    // Priority Options
+    const priorityOptions = [
+        { value: "critical", label: "Critical" },
+        { value: "high", label: "High" },
+        { value: "medium", label: "Medium" },
+        { value: "low", label: "Low" }
+    ]
+
+    // Triage Categories
+    const triageOptions = [
+        { value: "immediate", label: "Immediate" },
+        { value: "delayed", label: "Delayed" },
+        { value: "minor", label: "Minor" },
+        { value: "expectant", label: "Expectant" }
     ]
 
     // Symptom options for checkboxes
@@ -214,18 +274,74 @@ export default function FirstAiderDashboard() {
             
             setAssignments(formattedAssignments)
             
-            setStats({
+            setStats(prev => ({
+                ...prev,
                 activeAssignments: formattedAssignments.filter(a => a.status !== "completed").length,
                 highPriority: formattedAssignments.filter(a => a.priority === "high").length,
-                victimsAssisted: victims.length,
-                avgResponse: "6.5 min"
-            })
+            }))
 
         } catch (error) {
             console.error('Failed to fetch active emergencies:', error)
             setAssignments(getDefaultAssignments())
-        } finally {
-            setIsLoading(false)
+        }
+    }
+
+    // Fetch hospital communications
+    const fetchHospitalCommunications = async () => {
+        try {
+            const response = await apiClient.get('/hospital-comms/api/communications/first-aider-active/')
+            const communications = response.data || []
+            
+            setHospitalCommunications(communications)
+            
+            setStats(prev => ({
+                ...prev,
+                activeCommunications: communications.filter(c => 
+                    ['sent', 'acknowledged', 'preparing', 'ready', 'en_route'].includes(c.status)
+                ).length
+            }))
+
+        } catch (error) {
+            console.error('Failed to fetch hospital communications:', error)
+            setHospitalCommunications([])
+        }
+    }
+
+    // Fetch available hospitals
+    const fetchHospitals = async () => {
+        try {
+            const response = await apiClient.get('/hospitals/active/')
+            setHospitals(response.data || [])
+        } catch (error) {
+            console.error('Failed to fetch hospitals:', error)
+            setHospitals([])
+        }
+    }
+
+    // Fetch emergency history for victims data
+    const fetchEmergencyHistory = async () => {
+        try {
+            const response = await apiClient.get('/emergencies/history/?limit=10')
+            const history = response.data || []
+            
+            const formattedVictims = history.slice(0, 3).map(emergency => ({
+                id: emergency.alert_id,
+                name: emergency.user_name || "Unknown Victim",
+                condition: getConditionFromType(emergency.emergency_type),
+                vitals: generateMockVitals(emergency.emergency_type),
+                location: emergency.address || "Location not specified",
+                status: emergency.priority === "high" ? "critical" : "stable",
+                originalData: emergency,
+                hasAssessment: false,
+                hasCommunication: false
+            }))
+            
+            setVictims(formattedVictims)
+            setStats(prev => ({ ...prev, victimsAssisted: formattedVictims.length }))
+            
+        } catch (error) {
+            console.error('Failed to fetch emergency history:', error)
+            setVictims(getDefaultVictims())
         }
     }
 
@@ -250,31 +366,6 @@ export default function FirstAiderDashboard() {
         },
     ]
 
-    // Fetch emergency history for victims data
-    const fetchEmergencyHistory = async () => {
-        try {
-            const response = await apiClient.get('/emergencies/history/?limit=10')
-            const history = response.data || []
-            
-            const formattedVictims = history.slice(0, 3).map(emergency => ({
-                id: emergency.alert_id,
-                name: emergency.user_name || "Unknown Victim",
-                condition: getConditionFromType(emergency.emergency_type),
-                vitals: generateMockVitals(emergency.emergency_type),
-                location: emergency.address || "Location not specified",
-                status: emergency.priority === "high" ? "critical" : "stable",
-                originalData: emergency,
-                hasAssessment: false
-            }))
-            
-            setVictims(formattedVictims)
-            
-        } catch (error) {
-            console.error('Failed to fetch emergency history:', error)
-            setVictims(getDefaultVictims())
-        }
-    }
-
     const getDefaultVictims = () => [
         {
             id: "1",
@@ -283,7 +374,8 @@ export default function FirstAiderDashboard() {
             vitals: { heartRate: 92, bloodPressure: "120/80", temperature: 37.2 },
             location: "Main Street & 5th Ave",
             status: "critical",
-            hasAssessment: false
+            hasAssessment: false,
+            hasCommunication: false
         },
     ]
 
@@ -456,7 +548,9 @@ export default function FirstAiderDashboard() {
             temperature: victim?.vitals?.temperature?.toString() || "",
             respiratoryRate: "",
             oxygenSaturation: "",
-            gcsScore: "",
+            gcs_eyes: "",
+            gcs_verbal: "",
+            gcs_motor: "",
             bloodGlucose: "",
             
             // Symptoms
@@ -479,6 +573,7 @@ export default function FirstAiderDashboard() {
             consciousness: "alert",
             breathing: "normal",
             circulation: "normal",
+            triage_category: "delayed",
             
             // Treatment
             treatmentProvided: "",
@@ -517,6 +612,18 @@ export default function FirstAiderDashboard() {
         setVictimAssessment(prev => ({ ...prev, [name]: value }))
     }
 
+    // Handle hospital communication input changes
+    const handleHospitalCommunicationInputChange = (e) => {
+        const { name, value } = e.target
+        setHospitalCommunicationData(prev => ({ ...prev, [name]: value }))
+    }
+
+    // Handle communication status input changes
+    const handleCommunicationStatusInputChange = (e) => {
+        const { name, value } = e.target
+        setCommunicationStatusData(prev => ({ ...prev, [name]: value }))
+    }
+
     // Generate assessment summary
     const generateAssessmentSummary = (assessment, victim) => {
         return {
@@ -533,7 +640,7 @@ export default function FirstAiderDashboard() {
                 temperature: assessment.temperature,
                 respiratoryRate: assessment.respiratoryRate,
                 oxygenSaturation: assessment.oxygenSaturation,
-                gcsScore: assessment.gcsScore,
+                gcsScore: `${assessment.gcs_eyes || ''}-${assessment.gcs_verbal || ''}-${assessment.gcs_motor || ''}`,
                 bloodGlucose: assessment.bloodGlucose
             },
             symptoms: assessment.symptoms,
@@ -552,7 +659,8 @@ export default function FirstAiderDashboard() {
                 condition: assessment.condition,
                 consciousness: assessment.consciousness,
                 breathing: assessment.breathing,
-                circulation: assessment.circulation
+                circulation: assessment.circulation,
+                triage: assessment.triage_category
             },
             treatment: {
                 provided: assessment.treatmentProvided,
@@ -586,12 +694,33 @@ export default function FirstAiderDashboard() {
             const summary = generateAssessmentSummary(victimAssessment, selectedVictim)
             setAssessmentSummary(summary)
 
-            // In a real app, you would send this to your backend
-            console.log('Victim assessment data:', {
-                alertId: selectedVictim?.id,
-                assessment: victimAssessment,
-                summary: summary
-            })
+            // If this assessment is linked to a hospital communication, submit it
+            if (selectedVictim?.communicationId) {
+                const assessmentData = {
+                    heart_rate: victimAssessment.heartRate || null,
+                    blood_pressure: victimAssessment.bloodPressure || "",
+                    temperature: victimAssessment.temperature || null,
+                    respiratory_rate: victimAssessment.respiratoryRate || null,
+                    oxygen_saturation: victimAssessment.oxygenSaturation || null,
+                    gcs_eyes: victimAssessment.gcs_eyes || null,
+                    gcs_verbal: victimAssessment.gcs_verbal || null,
+                    gcs_motor: victimAssessment.gcs_motor || null,
+                    blood_glucose: victimAssessment.bloodGlucose || null,
+                    chief_complaint: victimAssessment.symptoms.join(', '),
+                    injuries: victimAssessment.injuries.join(', '),
+                    allergies: victimAssessment.allergies,
+                    medications: victimAssessment.medications,
+                    medical_history: victimAssessment.medicalHistory,
+                    pain_level: victimAssessment.painLevel,
+                    pain_location: victimAssessment.painLocation,
+                    triage_category: victimAssessment.triage_category,
+                    treatment_provided: victimAssessment.treatmentProvided,
+                    notes: victimAssessment.notes,
+                    recommendations: victimAssessment.recommendations
+                }
+
+                await apiClient.post(`/hospital-comms/api/communications/${selectedVictim.communicationId}/add-assessment/`, assessmentData)
+            }
 
             // Update local victims data
             if (selectedVictim) {
@@ -650,6 +779,104 @@ export default function FirstAiderDashboard() {
         }
     }
 
+    // Open hospital communication form
+    const handleOpenHospitalCommunication = (victim = null) => {
+        setSelectedVictim(victim)
+        setHospitalCommunicationData({
+            emergency_alert_id: victim?.id || "",
+            hospital: "",
+            priority: victim?.status === "critical" ? "critical" : "high",
+            victim_name: victim?.name || "",
+            victim_age: "",
+            victim_gender: "",
+            chief_complaint: victim?.condition || "",
+            vital_signs: victim?.vitals ? `HR: ${victim.vitals.heartRate}, BP: ${victim.vitals.bloodPressure}, Temp: ${victim.vitals.temperature}` : "",
+            first_aid_provided: "",
+            estimated_arrival_minutes: "15",
+            required_specialties: "",
+            equipment_needed: "",
+            blood_type_required: ""
+        })
+        setShowHospitalCommunicationForm(true)
+    }
+
+    // Submit hospital communication
+    const handleHospitalCommunication = async (e) => {
+        e.preventDefault()
+        setIsSubmitting(true)
+        setFormError("")
+        setFormSuccess("")
+
+        try {
+            const response = await apiClient.post('/hospital-comms/api/communications/', hospitalCommunicationData)
+            
+            setFormSuccess("Hospital communication sent successfully!")
+            
+            // Update victim with communication info
+            if (selectedVictim) {
+                setVictims(prev => prev.map(victim => 
+                    victim.id === selectedVictim.id 
+                        ? { ...victim, hasCommunication: true, communicationId: response.data.id }
+                        : victim
+                ))
+            }
+
+            // Refresh communications
+            fetchHospitalCommunications()
+            
+            // Close form after 2 seconds
+            setTimeout(() => {
+                setShowHospitalCommunicationForm(false)
+                setSelectedVictim(null)
+            }, 2000)
+
+        } catch (error) {
+            console.error('Hospital communication failed:', error)
+            setFormError(error.response?.data?.message || "Failed to send hospital communication")
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    // Open communication status update form
+    const handleOpenCommunicationStatus = (communication) => {
+        setSelectedCommunication(communication)
+        setCommunicationStatusData({
+            status: communication.status,
+            notes: ""
+        })
+        setShowCommunicationStatusForm(true)
+    }
+
+    // Update communication status
+    const handleCommunicationStatusUpdate = async (e) => {
+        e.preventDefault()
+        setIsSubmitting(true)
+        setFormError("")
+        setFormSuccess("")
+
+        try {
+            await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-status/`, communicationStatusData)
+            
+            setFormSuccess("Communication status updated successfully!")
+            
+            // Refresh communications
+            fetchHospitalCommunications()
+            
+            // Close form after 2 seconds
+            setTimeout(() => {
+                setShowCommunicationStatusForm(false)
+                setSelectedCommunication(null)
+            }, 2000)
+
+        } catch (error) {
+            console.error('Communication status update failed:', error)
+            setFormError(error.response?.data?.message || "Failed to update communication status")
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     // Get current location for status update
     const getCurrentLocationForUpdate = () => {
         if (navigator.geolocation) {
@@ -672,27 +899,43 @@ export default function FirstAiderDashboard() {
         }
     }
 
-    // Fetch data on component mount
-    useEffect(() => {
-        fetchActiveEmergencies()
-        fetchEmergencyHistory()
-    }, [])
-
-    const getPriorityColor = (priority) => {
-        switch (priority) {
-            case "high": return "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
-            case "medium": return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
-            case "low": return "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
-            default: return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
+    // Use geocoding API to convert coordinates to address
+    const getAddressFromCoordinates = async (lat, lng) => {
+        try {
+            const response = await apiClient.get(`/geolocation/geocode/?lat=${lat}&lng=${lng}`)
+            return response.data.address || ""
+        } catch (error) {
+            console.error('Geocoding failed:', error)
+            return ""
         }
     }
 
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case "pending": return <AlertTriangle className="w-5 h-5 text-[#740000]" />
-            case "in-progress": return <Navigation className="w-5 h-5 text-[#b90000]" />
-            case "completed": return <CheckCircle className="w-5 h-5 text-[#1a0000]" />
-            default: return <AlertCircle className="w-5 h-5 text-[#740000]" />
+    // Get current location with address conversion
+    const getCurrentLocation = async () => {
+        if (navigator.geolocation) {
+            setIsSubmitting(true)
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const lat = position.coords.latitude
+                    const lng = position.coords.longitude
+                    const address = await getAddressFromCoordinates(lat, lng)
+                    
+                    setEmergencyData(prev => ({
+                        ...prev,
+                        latitude: lat.toString(),
+                        longitude: lng.toString(),
+                        address: address
+                    }))
+                    setIsSubmitting(false)
+                },
+                () => {
+                    setFormError("Failed to get current location")
+                    setIsSubmitting(false)
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+            )
+        } else {
+            setFormError("Geolocation is not supported by this browser.")
         }
     }
 
@@ -706,29 +949,6 @@ export default function FirstAiderDashboard() {
     const handleStatusInputChange = (e) => {
         const { name, value } = e.target
         setStatusUpdateData(prev => ({ ...prev, [name]: value }))
-    }
-
-    const getCurrentLocation = () => {
-        if (navigator.geolocation) {
-            setIsSubmitting(true)
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    setEmergencyData(prev => ({
-                        ...prev,
-                        latitude: position.coords.latitude.toString(),
-                        longitude: position.coords.longitude.toString()
-                    }))
-                    setIsSubmitting(false)
-                },
-                () => {
-                    setFormError("Failed to get current location. Please enter coordinates manually.")
-                    setIsSubmitting(false)
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-            )
-        } else {
-            setFormError("Geolocation is not supported by this browser.")
-        }
     }
 
     const handleSubmitEmergency = async (e) => {
@@ -773,7 +993,6 @@ export default function FirstAiderDashboard() {
 
             setTimeout(() => {
                 setShowEmergencyForm(false)
-                navigate('/dashboard/first_aider')
             }, 2000)
 
         } catch (error) {
@@ -781,6 +1000,55 @@ export default function FirstAiderDashboard() {
             setFormError(error.message || "An error occurred while submitting the emergency alert")
         } finally {
             setIsSubmitting(false)
+        }
+    }
+
+    // Fetch data on component mount
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true)
+            await Promise.all([
+                fetchActiveEmergencies(),
+                fetchEmergencyHistory(),
+                fetchHospitalCommunications(),
+                fetchHospitals()
+            ])
+            setIsLoading(false)
+        }
+        
+        loadData()
+    }, [])
+
+    const getPriorityColor = (priority) => {
+        switch (priority) {
+            case "critical": 
+            case "high": return "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
+            case "medium": return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
+            case "low": return "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
+            default: return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
+        }
+    }
+
+    const getStatusIcon = (status) => {
+        switch (status) {
+            case "pending": return <AlertTriangle className="w-5 h-5 text-[#740000]" />
+            case "in-progress": return <Navigation className="w-5 h-5 text-[#b90000]" />
+            case "completed": return <CheckCircle className="w-5 h-5 text-[#1a0000]" />
+            default: return <AlertCircle className="w-5 h-5 text-[#740000]" />
+        }
+    }
+
+    const getCommunicationStatusColor = (status) => {
+        switch (status) {
+            case "sent": return "bg-blue-100 text-blue-800 border-blue-200"
+            case "acknowledged": return "bg-yellow-100 text-yellow-800 border-yellow-200"
+            case "preparing": return "bg-orange-100 text-orange-800 border-orange-200"
+            case "ready": return "bg-green-100 text-green-800 border-green-200"
+            case "en_route": return "bg-purple-100 text-purple-800 border-purple-200"
+            case "arrived": return "bg-indigo-100 text-indigo-800 border-indigo-200"
+            case "completed": return "bg-gray-100 text-gray-800 border-gray-200"
+            case "cancelled": return "bg-red-100 text-red-800 border-red-200"
+            default: return "bg-gray-100 text-gray-800 border-gray-200"
         }
     }
 
@@ -792,7 +1060,7 @@ export default function FirstAiderDashboard() {
                     <div className="flex items-center justify-center h-64">
                         <div className="text-center">
                             <div className="w-8 h-8 border-4 border-[#b90000] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                            <p className="text-[#740000]">Loading emergencies...</p>
+                            <p className="text-[#740000]">Loading dashboard...</p>
                         </div>
                     </div>
                 </main>
@@ -807,7 +1075,7 @@ export default function FirstAiderDashboard() {
                 {/* Page Title */}
                 <div className="mb-8">
                     <h1 className="text-4xl font-bold text-[#1a0000] mb-2">First-Aider Dashboard</h1>
-                    <p className="text-[#740000]">Manage emergency assignments and victim care</p>
+                    <p className="text-[#740000]">Manage emergency assignments, victim care, and hospital communications</p>
                 </div>
 
                 {/* Stats Grid */}
@@ -842,10 +1110,10 @@ export default function FirstAiderDashboard() {
                     <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-[#740000] mb-1">Avg Response</p>
-                                <p className="text-3xl font-bold text-[#1a0000]">{stats.avgResponse}</p>
+                                <p className="text-sm text-[#740000] mb-1">Active Comms</p>
+                                <p className="text-3xl font-bold text-[#1a0000]">{stats.activeCommunications}</p>
                             </div>
-                            <Clock className="w-12 h-12 text-[#740000]/20" />
+                            <MessageCircle className="w-12 h-12 text-[#740000]/20" />
                         </div>
                     </div>
                 </div>
@@ -937,6 +1205,99 @@ export default function FirstAiderDashboard() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Hospital Communications Section */}
+                        <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
+                            <div className="flex flex-row items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <div>
+                                    <h3 className="text-2xl font-bold text-[#1a0000]">Hospital Communications</h3>
+                                    <p className="text-[#740000]">Communications with hospitals about victims</p>
+                                </div>
+                            </div>
+                            <div className="p-6">
+                                <div className="space-y-4">
+                                    {hospitalCommunications.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <MessageCircle className="w-12 h-12 text-[#740000]/50 mx-auto mb-4" />
+                                            <p className="text-[#740000]">No active hospital communications</p>
+                                            <button
+                                                onClick={() => setShowHospitalCommunicationForm(true)}
+                                                className="mt-4 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium text-sm transition-colors"
+                                            >
+                                                <Plus className="w-4 h-4 mr-2 inline" />
+                                                Create Communication
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        hospitalCommunications.map((communication) => (
+                                            <div
+                                                key={communication.id}
+                                                className="border border-[#ffe6c5] rounded-lg p-4 hover:border-[#b90000] transition"
+                                            >
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div className="flex items-start gap-3 flex-1">
+                                                        <MessageCircle className="w-5 h-5 text-[#b90000] mt-1" />
+                                                        <div>
+                                                            <h3 className="font-semibold text-[#1a0000]">
+                                                                {communication.victim_name || "Unknown Victim"}
+                                                            </h3>
+                                                            <div className="flex items-center gap-1 text-sm text-[#740000] mt-1">
+                                                                <Building className="w-4 h-4" />
+                                                                {communication.hospital_name}
+                                                            </div>
+                                                            <p className="text-sm text-[#740000] mt-1">
+                                                                {communication.chief_complaint}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-end gap-2">
+                                                        <span
+                                                            className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(communication.priority)}`}
+                                                        >
+                                                            {communication.priority}
+                                                        </span>
+                                                        <span
+                                                            className={`px-2 py-1 rounded-full text-xs font-medium border ${getCommunicationStatusColor(communication.status)}`}
+                                                        >
+                                                            {communication.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between text-sm pt-3 border-t border-[#ffe6c5]">
+                                                    <div className="flex gap-4 text-[#740000]">
+                                                        <span>ETA: {communication.estimated_arrival_minutes} mins</span>
+                                                        <span>Created: {new Date(communication.created_at).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => handleOpenCommunicationStatus(communication)}
+                                                            className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
+                                                        >
+                                                            Update Status
+                                                        </button>
+                                                        {!communication.has_assessment && (
+                                                            <button 
+                                                                onClick={() => {
+                                                                    const victim = victims.find(v => v.id === communication.emergency_alert_id)
+                                                                    handleOpenVictimAssessment(victim || {
+                                                                        id: communication.emergency_alert_id,
+                                                                        name: communication.victim_name,
+                                                                        communicationId: communication.id
+                                                                    })
+                                                                }}
+                                                                className="px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
+                                                            >
+                                                                Add Assessment
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Victims & Guidance Section */}
@@ -949,13 +1310,22 @@ export default function FirstAiderDashboard() {
                                         <h3 className="text-2xl font-bold text-[#1a0000]">Victim Information</h3>
                                         <p className="text-[#740000]">Current patient information</p>
                                     </div>
-                                    <button
-                                        onClick={() => handleOpenVictimAssessment()}
-                                        className="p-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg transition-colors"
-                                        title="Add New Victim Assessment"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handleOpenVictimAssessment()}
+                                            className="p-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg transition-colors"
+                                            title="Add New Victim Assessment"
+                                        >
+                                            <Stethoscope className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleOpenHospitalCommunication()}
+                                            className="p-2 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded-lg transition-colors"
+                                            title="Create Hospital Communication"
+                                        >
+                                            <MessageCircle className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div className="p-6">
@@ -964,13 +1334,22 @@ export default function FirstAiderDashboard() {
                                         <div className="text-center py-4">
                                             <User className="w-8 h-8 text-[#740000]/50 mx-auto mb-2" />
                                             <p className="text-[#740000] text-sm">No victim data available</p>
-                                            <button
-                                                onClick={() => handleOpenVictimAssessment()}
-                                                className="mt-2 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
-                                            >
-                                                <Plus className="w-4 h-4 mr-1 inline" />
-                                                Add First Assessment
-                                            </button>
+                                            <div className="flex gap-2 mt-3">
+                                                <button
+                                                    onClick={() => handleOpenVictimAssessment()}
+                                                    className="flex-1 px-3 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
+                                                >
+                                                    <Stethoscope className="w-4 h-4 mr-1 inline" />
+                                                    Assess
+                                                </button>
+                                                <button
+                                                    onClick={() => handleOpenHospitalCommunication()}
+                                                    className="flex-1 px-3 py-2 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
+                                                >
+                                                    <MessageCircle className="w-4 h-4 mr-1 inline" />
+                                                    Notify Hospital
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : (
                                         victims.map((victim) => (
@@ -983,12 +1362,20 @@ export default function FirstAiderDashboard() {
                                                     <div>
                                                         <h4 className="font-semibold text-[#1a0000]">{victim.name}</h4>
                                                         <p className="text-xs text-[#740000]">{victim.condition}</p>
-                                                        {victim.hasAssessment && (
-                                                            <div className="flex items-center gap-1 mt-1">
-                                                                <CheckCircle className="w-3 h-3 text-[#1a0000]" />
-                                                                <span className="text-xs text-[#1a0000]">Assessment Complete</span>
-                                                            </div>
-                                                        )}
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            {victim.hasAssessment && (
+                                                                <div className="flex items-center gap-1">
+                                                                    <CheckCircle className="w-3 h-3 text-[#1a0000]" />
+                                                                    <span className="text-xs text-[#1a0000]">Assessed</span>
+                                                                </div>
+                                                            )}
+                                                            {victim.hasCommunication && (
+                                                                <div className="flex items-center gap-1">
+                                                                    <MessageCircle className="w-3 h-3 text-[#b90000]" />
+                                                                    <span className="text-xs text-[#b90000]">Hospital Notified</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <span
@@ -1014,7 +1401,16 @@ export default function FirstAiderDashboard() {
                                                                     className="p-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-xs transition-colors"
                                                                     title="Assess Victim"
                                                                 >
-                                                                    <Plus className="w-3 h-3" />
+                                                                    <Stethoscope className="w-3 h-3" />
+                                                                </button>
+                                                            )}
+                                                            {!victim.hasCommunication && (
+                                                                <button
+                                                                    onClick={() => handleOpenHospitalCommunication(victim)}
+                                                                    className="p-1 border border-[#1a0000] text-[#1a0000] hover:bg-[#ffe6c5] rounded text-xs transition-colors"
+                                                                    title="Notify Hospital"
+                                                                >
+                                                                    <MessageCircle className="w-3 h-3" />
                                                                 </button>
                                                             )}
                                                         </div>
@@ -1035,23 +1431,34 @@ export default function FirstAiderDashboard() {
                                                     </div>
                                                 </div>
                                                 <div className="mt-3 pt-3 border-t border-[#ffe6c5]">
-                                                    {victim.hasAssessment ? (
-                                                        <button
-                                                            onClick={() => handleViewAssessmentSummary(victim)}
-                                                            className="w-full px-3 py-1 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                                        >
-                                                            <Eye className="w-3 h-3" />
-                                                            View Assessment Summary
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => handleOpenVictimAssessment(victim)}
-                                                            className="w-full px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                                        >
-                                                            <Stethoscope className="w-3 h-3" />
-                                                            Assess Victim
-                                                        </button>
-                                                    )}
+                                                    <div className="flex gap-2">
+                                                        {victim.hasAssessment ? (
+                                                            <button
+                                                                onClick={() => handleViewAssessmentSummary(victim)}
+                                                                className="flex-1 px-3 py-1 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                            >
+                                                                <Eye className="w-3 h-3" />
+                                                                View Assessment
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleOpenVictimAssessment(victim)}
+                                                                className="flex-1 px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                            >
+                                                                <Stethoscope className="w-3 h-3" />
+                                                                Assess Victim
+                                                            </button>
+                                                        )}
+                                                        {!victim.hasCommunication && (
+                                                            <button
+                                                                onClick={() => handleOpenHospitalCommunication(victim)}
+                                                                className="flex-1 px-3 py-1 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                            >
+                                                                <MessageCircle className="w-3 h-3" />
+                                                                Notify Hospital
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))
@@ -1157,7 +1564,7 @@ export default function FirstAiderDashboard() {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <label className="block text-sm font-medium text-[#1a0000]">
-                                            Location Coordinates *
+                                            Location
                                         </label>
                                         <button
                                             type="button"
@@ -1170,61 +1577,20 @@ export default function FirstAiderDashboard() {
                                         </button>
                                     </div>
 
-                                    <div className="grid md:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-[#1a0000]">
-                                                Latitude *
-                                            </label>
-                                            <input
-                                                type="number"
-                                                name="latitude"
-                                                value={emergencyData.latitude}
-                                                onChange={handleInputChange}
-                                                step="any"
-                                                min="-90"
-                                                max="90"
-                                                placeholder="e.g., 40.7128"
-                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                                required
-                                                disabled={isSubmitting}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-[#1a0000]">
-                                                Longitude *
-                                            </label>
-                                            <input
-                                                type="number"
-                                                name="longitude"
-                                                value={emergencyData.longitude}
-                                                onChange={handleInputChange}
-                                                step="any"
-                                                min="-180"
-                                                max="180"
-                                                placeholder="e.g., -74.0060"
-                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                                required
-                                                disabled={isSubmitting}
-                                            />
-                                        </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Address
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="address"
+                                            value={emergencyData.address}
+                                            onChange={handleInputChange}
+                                            placeholder="Enter street address or location description"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            disabled={isSubmitting}
+                                        />
                                     </div>
-                                </div>
-
-                                {/* Address */}
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
-                                        Address (Optional)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="address"
-                                        value={emergencyData.address}
-                                        onChange={handleInputChange}
-                                        placeholder="Enter street address or location description"
-                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                        disabled={isSubmitting}
-                                    />
                                 </div>
 
                                 {/* Description */}
@@ -1239,22 +1605,6 @@ export default function FirstAiderDashboard() {
                                         rows={4}
                                         placeholder="Describe the emergency situation, number of victims, conditions, etc."
                                         className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
-                                        disabled={isSubmitting}
-                                    />
-                                </div>
-
-                                {/* Location ID */}
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
-                                        Location ID (Optional)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        name="location_id"
-                                        value={emergencyData.location_id}
-                                        onChange={handleInputChange}
-                                        placeholder="Enter location ID if available"
-                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                                         disabled={isSubmitting}
                                     />
                                 </div>
@@ -1331,77 +1681,6 @@ export default function FirstAiderDashboard() {
                                     <p className="text-[#740000]">{selectedAssignment.type} - {selectedAssignment.location}</p>
                                 </div>
 
-                                {/* Location Update Section */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Update Location (Optional)
-                                        </label>
-                                        <button
-                                            type="button"
-                                            onClick={getCurrentLocationForUpdate}
-                                            disabled={isSubmitting}
-                                            className="flex items-center gap-2 px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm transition-colors disabled:opacity-50"
-                                        >
-                                            <Map className="w-4 h-4" />
-                                            Use Current Location
-                                        </button>
-                                    </div>
-
-                                    <div className="grid md:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-[#1a0000]">
-                                                Latitude
-                                            </label>
-                                            <input
-                                                type="number"
-                                                name="latitude"
-                                                value={statusUpdateData.latitude}
-                                                onChange={handleStatusInputChange}
-                                                step="any"
-                                                min="-90"
-                                                max="90"
-                                                placeholder="e.g., 40.7128"
-                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                                disabled={isSubmitting}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-[#1a0000]">
-                                                Longitude
-                                            </label>
-                                            <input
-                                                type="number"
-                                                name="longitude"
-                                                value={statusUpdateData.longitude}
-                                                onChange={handleStatusInputChange}
-                                                step="any"
-                                                min="-180"
-                                                max="180"
-                                                placeholder="e.g., -74.0060"
-                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                                disabled={isSubmitting}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Address
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="address"
-                                            value={statusUpdateData.address}
-                                            onChange={handleStatusInputChange}
-                                            placeholder="Enter updated address"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-                                </div>
-
                                 {/* Status Update */}
                                 <div className="space-y-4">
                                     <div className="space-y-2">
@@ -1444,6 +1723,405 @@ export default function FirstAiderDashboard() {
                                     <button
                                         type="button"
                                         onClick={() => setShowStatusUpdateForm(false)}
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-[#fff3ea] border-t-transparent rounded-full animate-spin" />
+                                                Updating...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-4 h-4" />
+                                                Update Status
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Hospital Communication Form Modal */}
+                {showHospitalCommunicationForm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">
+                                    {selectedVictim ? `Notify Hospital - ${selectedVictim.name}` : 'Create Hospital Communication'}
+                                </h2>
+                                <button
+                                    onClick={() => setShowHospitalCommunicationForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                    disabled={isSubmitting}
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleHospitalCommunication} className="p-6 space-y-6">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000]/20 rounded-lg">
+                                        <p className="text-sm text-[#b90000] flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4" />
+                                            {formError}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {formSuccess && (
+                                    <div className="p-3 bg-[#1a0000]/10 border border-[#1a0000]/20 rounded-lg">
+                                        <p className="text-sm text-[#1a0000] flex items-center gap-2">
+                                            <CheckCircle className="w-4 h-4" />
+                                            {formSuccess}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Emergency Alert ID */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Emergency Alert ID *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="emergency_alert_id"
+                                        value={hospitalCommunicationData.emergency_alert_id}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        required
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* Hospital Selection */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Hospital *
+                                    </label>
+                                    <select
+                                        name="hospital"
+                                        value={hospitalCommunicationData.hospital}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        required
+                                        disabled={isSubmitting}
+                                    >
+                                        <option value="">Select Hospital</option>
+                                        {hospitals.map(hospital => (
+                                            <option key={hospital.id} value={hospital.id}>
+                                                {hospital.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Priority */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Priority *
+                                    </label>
+                                    <select
+                                        name="priority"
+                                        value={hospitalCommunicationData.priority}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        required
+                                        disabled={isSubmitting}
+                                    >
+                                        {priorityOptions.map(option => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Victim Information */}
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Victim Name *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="victim_name"
+                                            value={hospitalCommunicationData.victim_name}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            required
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Victim Age
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="victim_age"
+                                            value={hospitalCommunicationData.victim_age}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            disabled={isSubmitting}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Victim Gender
+                                    </label>
+                                    <select
+                                        name="victim_gender"
+                                        value={hospitalCommunicationData.victim_gender}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        disabled={isSubmitting}
+                                    >
+                                        <option value="">Select Gender</option>
+                                        {genderOptions.map(option => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Chief Complaint */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Chief Complaint *
+                                    </label>
+                                    <textarea
+                                        name="chief_complaint"
+                                        value={hospitalCommunicationData.chief_complaint}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        rows={3}
+                                        placeholder="Describe the main medical issue or injury"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                        required
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* Vital Signs */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Vital Signs
+                                    </label>
+                                    <textarea
+                                        name="vital_signs"
+                                        value={hospitalCommunicationData.vital_signs}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        rows={2}
+                                        placeholder="Current vital signs (heart rate, blood pressure, etc.)"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* First Aid Provided */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        First Aid Provided
+                                    </label>
+                                    <textarea
+                                        name="first_aid_provided"
+                                        value={hospitalCommunicationData.first_aid_provided}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        rows={2}
+                                        placeholder="First aid treatments already administered"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* Estimated Arrival */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Estimated Arrival (minutes) *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        name="estimated_arrival_minutes"
+                                        value={hospitalCommunicationData.estimated_arrival_minutes}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        min="1"
+                                        max="120"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        required
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* Additional Information */}
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Required Specialties
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="required_specialties"
+                                        value={hospitalCommunicationData.required_specialties}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        placeholder="e.g., Trauma, Cardiology, Neurology"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Equipment Needed
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="equipment_needed"
+                                        value={hospitalCommunicationData.equipment_needed}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        placeholder="e.g., Ventilator, Defibrillator, Splints"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Blood Type Required
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="blood_type_required"
+                                        value={hospitalCommunicationData.blood_type_required}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        placeholder="e.g., O+, AB-"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                {/* Submit Buttons */}
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowHospitalCommunicationForm(false)}
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-[#fff3ea] border-t-transparent rounded-full animate-spin" />
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Send className="w-4 h-4" />
+                                                Send to Hospital
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Communication Status Update Form Modal */}
+                {showCommunicationStatusForm && selectedCommunication && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Update Communication Status</h2>
+                                <button
+                                    onClick={() => setShowCommunicationStatusForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                    disabled={isSubmitting}
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCommunicationStatusUpdate} className="p-6 space-y-6">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000]/20 rounded-lg">
+                                        <p className="text-sm text-[#b90000] flex items-center gap-2">
+                                            <AlertCircle className="w-4 h-4" />
+                                            {formError}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {formSuccess && (
+                                    <div className="p-3 bg-[#1a0000]/10 border border-[#1a0000]/20 rounded-lg">
+                                        <p className="text-sm text-[#1a0000] flex items-center gap-2">
+                                            <CheckCircle className="w-4 h-4" />
+                                            {formSuccess}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="bg-[#ffe6c5] p-4 rounded-lg">
+                                    <h3 className="font-semibold text-[#1a0000] mb-1">{selectedCommunication.victim_name}</h3>
+                                    <p className="text-sm text-[#740000]">{selectedCommunication.hospital_name}</p>
+                                    <p className="text-xs text-[#740000] mt-1">Current Status: {selectedCommunication.status}</p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        New Status *
+                                    </label>
+                                    <select
+                                        name="status"
+                                        value={communicationStatusData.status}
+                                        onChange={handleCommunicationStatusInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        required
+                                        disabled={isSubmitting}
+                                    >
+                                        {communicationStatusOptions.map(option => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Notes
+                                    </label>
+                                    <textarea
+                                        name="notes"
+                                        value={communicationStatusData.notes}
+                                        onChange={handleCommunicationStatusInputChange}
+                                        rows={3}
+                                        placeholder="Additional information about the status update"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCommunicationStatusForm(false)}
                                         disabled={isSubmitting}
                                         className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors disabled:opacity-50"
                                     >
@@ -1675,23 +2353,6 @@ export default function FirstAiderDashboard() {
 
                                         <div className="space-y-2">
                                             <label className="block text-sm font-medium text-[#1a0000]">
-                                                GCS Score
-                                            </label>
-                                            <input
-                                                type="number"
-                                                name="gcsScore"
-                                                value={victimAssessment.gcsScore}
-                                                onChange={handleAssessmentInputChange}
-                                                min="3"
-                                                max="15"
-                                                placeholder="e.g., 15"
-                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                                disabled={isSubmitting}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <label className="block text-sm font-medium text-[#1a0000]">
                                                 Blood Glucose (mg/dL)
                                             </label>
                                             <input
@@ -1700,6 +2361,60 @@ export default function FirstAiderDashboard() {
                                                 value={victimAssessment.bloodGlucose}
                                                 onChange={handleAssessmentInputChange}
                                                 placeholder="e.g., 100"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* GCS Scores */}
+                                    <div className="grid md:grid-cols-3 gap-4 pt-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                GCS Eyes (1-4)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="gcs_eyes"
+                                                value={victimAssessment.gcs_eyes}
+                                                onChange={handleAssessmentInputChange}
+                                                min="1"
+                                                max="4"
+                                                placeholder="1-4"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                GCS Verbal (1-5)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="gcs_verbal"
+                                                value={victimAssessment.gcs_verbal}
+                                                onChange={handleAssessmentInputChange}
+                                                min="1"
+                                                max="5"
+                                                placeholder="1-5"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                GCS Motor (1-6)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="gcs_motor"
+                                                value={victimAssessment.gcs_motor}
+                                                onChange={handleAssessmentInputChange}
+                                                min="1"
+                                                max="6"
+                                                placeholder="1-6"
                                                 className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                                                 disabled={isSubmitting}
                                             />
@@ -1961,6 +2676,25 @@ export default function FirstAiderDashboard() {
                                                 ))}
                                             </select>
                                         </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Triage Category
+                                            </label>
+                                            <select
+                                                name="triage_category"
+                                                value={victimAssessment.triage_category}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                                disabled={isSubmitting}
+                                            >
+                                                {triageOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -2150,6 +2884,10 @@ export default function FirstAiderDashboard() {
                                                 <span className={`font-medium ${assessmentSummary.assessment.condition === 'critical' ? 'text-[#b90000]' : assessmentSummary.assessment.condition === 'serious' ? 'text-[#b90000]' : assessmentSummary.assessment.condition === 'guarded' ? 'text-[#740000]' : 'text-[#1a0000]'}`}>
                                                     {assessmentSummary.assessment.condition}
                                                 </span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-[#740000]">Triage:</span>
+                                                <span className="text-[#1a0000] font-medium">{assessmentSummary.assessment.triage}</span>
                                             </div>
                                         </div>
                                     </div>
