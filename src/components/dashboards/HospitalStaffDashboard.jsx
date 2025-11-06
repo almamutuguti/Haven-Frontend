@@ -43,10 +43,7 @@ export default function HospitalStaffDashboard() {
 
     // Initialize current hospital based on user's registered hospital
     useEffect(() => {
-        const savedHospital = localStorage.getItem('currentHospital')
-        if (savedHospital) {
-            setCurrentHospital(JSON.parse(savedHospital))
-        } else if (user?.hospital_id) {
+        if (user?.hospital_id) {
             // Set hospital based on user's registration
             const userHospital = HOSPITALS.find(h => h.id === user.hospital_id)
             if (userHospital) {
@@ -54,7 +51,7 @@ export default function HospitalStaffDashboard() {
                 localStorage.setItem('currentHospital', JSON.stringify(userHospital))
             }
         } else {
-            // Default to first hospital
+            // If no hospital_id in user, use the first hospital as fallback
             setCurrentHospital(HOSPITALS[0])
             localStorage.setItem('currentHospital', JSON.stringify(HOSPITALS[0]))
         }
@@ -159,36 +156,23 @@ export default function HospitalStaffDashboard() {
         }
     }, [currentHospital])
 
-    // Hospital selector component
-    const HospitalSelector = () => (
+    // Hospital info component (replaces selector)
+    const HospitalInfo = () => (
         <div className="mb-6 p-4 bg-[#ffe6c5] rounded-lg border border-[#ffe6c5]">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="font-semibold text-[#1a0000]">Hospital Selection</h3>
+                    <h3 className="font-semibold text-[#1a0000]">Hospital Information</h3>
                     <p className="text-sm text-[#740000]">
-                        {user?.hospital_id 
-                            ? `You are registered to: ${HOSPITALS.find(h => h.id === user.hospital_id)?.name || currentHospital?.name}`
-                            : 'Select your hospital to view relevant communications'
+                        {currentHospital 
+                            ? `You are registered to: ${currentHospital.name}`
+                            : 'Hospital information loading...'
                         }
                     </p>
                 </div>
-                <select
-                    value={currentHospital?.id || ''}
-                    onChange={(e) => {
-                        const hospitalId = parseInt(e.target.value)
-                        const hospital = HOSPITALS.find(h => h.id === hospitalId)
-                        setCurrentHospital(hospital)
-                        localStorage.setItem('currentHospital', JSON.stringify(hospital))
-                    }}
-                    className="px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000]"
-                    disabled={!!user?.hospital_id} // Disable if user is registered to specific hospital
-                >
-                    {HOSPITALS.map(hospital => (
-                        <option key={hospital.id} value={hospital.id}>
-                            {hospital.name}
-                        </option>
-                    ))}
-                </select>
+                <div className="flex items-center gap-2 text-[#1a0000]">
+                    <Building className="w-5 h-5" />
+                    <span className="font-medium">{currentHospital?.name}</span>
+                </div>
             </div>
             {currentHospital && (
                 <div className="mt-2 text-sm text-[#1a0000]">
@@ -200,9 +184,9 @@ export default function HospitalStaffDashboard() {
                     )}
                 </div>
             )}
-            {user?.hospital_id && (
+            {!user?.hospital_id && (
                 <div className="mt-2 text-xs text-[#b90000]">
-                    * Your account is registered to this hospital. Contact admin to change.
+                    * Your account is not registered to a specific hospital. Contact admin to update your hospital assignment.
                 </div>
             )}
         </div>
@@ -359,12 +343,12 @@ export default function HospitalStaffDashboard() {
                 <div className="mb-8">
                     <h1 className="text-4xl font-bold text-[#1a0000] mb-2">Hospital Staff Dashboard</h1>
                     <p className="text-[#740000]">
-                        {currentHospital ? `Managing communications for ${currentHospital.name}` : 'Select your hospital to begin'}
+                        {currentHospital ? `Managing communications for ${currentHospital.name}` : 'Loading hospital information...'}
                     </p>
                 </div>
 
-                {/* Hospital Selector */}
-                <HospitalSelector />
+                {/* Hospital Info */}
+                <HospitalInfo />
 
                 {/* Stats Grid */}
                 <div className="grid md:grid-cols-4 gap-4 mb-8">
@@ -417,7 +401,7 @@ export default function HospitalStaffDashboard() {
                                     <p className="text-[#740000]">
                                         {currentHospital 
                                             ? `Incoming emergency alerts for ${currentHospital.name}`
-                                            : 'Select a hospital to view communications'
+                                            : 'Loading hospital communications...'
                                         }
                                     </p>
                                 </div>
@@ -430,7 +414,7 @@ export default function HospitalStaffDashboard() {
                                             <p className="text-[#740000]">
                                                 {currentHospital 
                                                     ? `No pending communications for ${currentHospital.name}`
-                                                    : 'Please select a hospital'
+                                                    : 'Loading communications...'
                                                 }
                                             </p>
                                         </div>
@@ -600,6 +584,11 @@ export default function HospitalStaffDashboard() {
                                     <p className="text-[#1a0000] font-medium">{currentHospital.name}</p>
                                     <p className="text-sm text-[#740000]">{currentHospital.location}</p>
                                     <p className="text-sm text-[#740000]">Emergency: +254 700 123 456</p>
+                                    {!user?.hospital_id && (
+                                        <p className="text-xs text-[#b90000] mt-2">
+                                            * Contact administrator to update your hospital assignment
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         )}
