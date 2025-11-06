@@ -999,7 +999,7 @@ export default function FirstAiderDashboard() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
+            <div className="min-h-screen bg-linear-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
                 <Sidebar />
                 <main className="ml-64 px-4 sm:px-6 lg:px-8 py-8">
                     <div className="flex items-center justify-center h-64">
@@ -1138,7 +1138,7 @@ export default function FirstAiderDashboard() {
                                                             <button 
                                                                 onClick={() => handleOpenStatusUpdate(assignment)}
                                                                 className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
-                                                            >
+                                                                >
                                                                 Update Status
                                                             </button>
                                                         )}
