@@ -14,7 +14,9 @@ export default function LandingPage() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    name: "",
+    password_confirm: "",
+    first_name: "",
+    last_name: "",
     username: "",
     phone: "",
     role: "hospital_staff",
@@ -25,25 +27,43 @@ export default function LandingPage() {
   const navigate = useNavigate()
   const authSectionRef = useRef(null)
 
-  // Mock data for hospitals and organizations - replace with actual API calls
+  // Fetch hospitals and organizations from API
   useEffect(() => {
-    // In a real app, you would fetch this from your backend
-    const mockHospitals = [
-      { id: "1", name: "General Hospital Central" },
-      { id: "2", name: "City Medical Center" },
-      { id: "3", name: "Community Health Hospital" },
-      { id: "4", name: "Regional Trauma Center" }
-    ]
+    const fetchData = async () => {
+      try {
+        const [hospitalsRes, organizationsRes] = await Promise.all([
+          fetch('/api/hospitals/'),
+          fetch('/api/organizations/')
+        ])
+        
+        if (hospitalsRes.ok) {
+          const hospitalsData = await hospitalsRes.json()
+          setHospitals(hospitalsData)
+        }
+        
+        if (organizationsRes.ok) {
+          const organizationsData = await organizationsRes.json()
+          setOrganizations(organizationsData)
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+        // Fallback mock data
+        setHospitals([
+          { id: "1", name: "General Hospital Central" },
+          { id: "2", name: "City Medical Center" },
+          { id: "3", name: "Community Health Hospital" },
+          { id: "4", name: "Regional Trauma Center" }
+        ])
+        setOrganizations([
+          { id: "1", name: "Red Cross Society" },
+          { id: "2", name: "St. John Ambulance" },
+          { id: "3", name: "Emergency Response Team" },
+          { id: "4", name: "Community First Aid Volunteers" }
+        ])
+      }
+    }
     
-    const mockOrganizations = [
-      { id: "1", name: "Red Cross Society" },
-      { id: "2", name: "St. John Ambulance" },
-      { id: "3", name: "Emergency Response Team" },
-      { id: "4", name: "Community First Aid Volunteers" }
-    ]
-    
-    setHospitals(mockHospitals)
-    setOrganizations(mockOrganizations)
+    fetchData()
   }, [])
 
   const handleInputChange = (e) => {
@@ -57,8 +77,10 @@ export default function LandingPage() {
     setFormError(null)
     setFormData({ 
       email: "", 
-      password: "", 
-      name: "", 
+      password: "",
+      password_confirm: "", 
+      first_name: "", 
+      last_name: "",
       username: "", 
       phone: "", 
       role: "hospital_staff",
@@ -89,7 +111,7 @@ export default function LandingPage() {
         const redirectPath = roleMap[userRole] || "/dashboard/"
         navigate(redirectPath)
       } else {
-        if (!formData.name || !formData.username) {
+        if (!formData.first_name || !formData.last_name || !formData.username) {
           throw new Error("Full name and username are required for registration")
         }
 
@@ -101,14 +123,20 @@ export default function LandingPage() {
         if (formData.role === "first_aider" && !formData.organization_id) {
           throw new Error("Please select an organization")
         }
+
+        if (formData.password !== formData.password_confirm) {
+          throw new Error("Passwords do not match")
+        }
         
         await register(
           formData.email, 
-          formData.password, 
-          formData.name, 
-          formData.role, 
-          formData.username, 
+          formData.password,
+          formData.password_confirm,
+          formData.first_name,
+          formData.last_name,
+          formData.username,
           formData.phone,
+          formData.role,
           formData.hospital_id,
           formData.organization_id
         )
@@ -117,7 +145,10 @@ export default function LandingPage() {
         setIsLogin(true)
         setFormData(prev => ({ 
           ...prev, 
-          name: "", 
+          password: "",
+          password_confirm: "",
+          first_name: "", 
+          last_name: "",
           username: "", 
           phone: "",
           hospital_id: "",
@@ -135,6 +166,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
+      {/* Navigation */}
       <nav className="border-b border-[#ffe6c5] bg-[#fff3ea]/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -157,6 +189,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
+      {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
@@ -167,7 +200,7 @@ export default function LandingPage() {
               Coordinated <span className="text-[#b90000]">Emergency</span> Response
             </h1>
             <p className="text-xl text-[#740000]">
-              Haven connects hospitals, first-aiders, and administrators in real-time to provide coordinated emergency
+              Haven connects hospitals, first-aiders and administrators in real-time to provide coordinated emergency
               response and save lives.
             </p>
             <div className="flex gap-4 pt-4">
@@ -183,6 +216,7 @@ export default function LandingPage() {
             </div>
           </div>
 
+          {/* Feature Cards */}
           <div className="space-y-4">
             <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg p-6 hover:border-[#b90000] transition-colors">
               <div className="flex items-start gap-4">
@@ -221,6 +255,7 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Auth Section */}
       <section ref={authSectionRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div id="features" className="space-y-8">
@@ -250,6 +285,7 @@ export default function LandingPage() {
             </div>
           </div>
 
+          {/* Auth Form */}
           <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg shadow-sm sticky top-24">
             <div className="p-6 pb-4">
               <h3 className="text-2xl font-bold text-[#1a0000]">{isLogin ? "Welcome Back" : "Join Haven"}</h3>
@@ -269,19 +305,35 @@ export default function LandingPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {!isLogin && (
                   <>
-                    <div className="space-y-2">
-                      <label htmlFor="name" className="block text-sm font-medium text-[#1a0000]">
-                        Full Name
-                      </label>
-                      <input
-                        id="name"
-                        name="name"
-                        placeholder="John Doe"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required={!isLogin}
-                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label htmlFor="first_name" className="block text-sm font-medium text-[#1a0000]">
+                          First Name
+                        </label>
+                        <input
+                          id="first_name"
+                          name="first_name"
+                          placeholder="John"
+                          value={formData.first_name}
+                          onChange={handleInputChange}
+                          required={!isLogin}
+                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label htmlFor="last_name" className="block text-sm font-medium text-[#1a0000]">
+                          Last Name
+                        </label>
+                        <input
+                          id="last_name"
+                          name="last_name"
+                          placeholder="Doe"
+                          value={formData.last_name}
+                          onChange={handleInputChange}
+                          required={!isLogin}
+                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                        />
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="username" className="block text-sm font-medium text-[#1a0000]">
@@ -324,7 +376,6 @@ export default function LandingPage() {
                       >
                         <option value="hospital_staff">Hospital Staff</option>
                         <option value="first_aider">First-Aider</option>
-                        <option value="system_admin">System Administrator</option>
                       </select>
                     </div>
                     
@@ -407,6 +458,23 @@ export default function LandingPage() {
                     className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                   />
                 </div>
+                {!isLogin && (
+                  <div className="space-y-2">
+                    <label htmlFor="password_confirm" className="block text-sm font-medium text-[#1a0000]">
+                      Confirm Password
+                    </label>
+                    <input
+                      id="password_confirm"
+                      name="password_confirm"
+                      type="password"
+                      placeholder="••••••••"
+                      value={formData.password_confirm}
+                      onChange={handleInputChange}
+                      required={!isLogin}
+                      className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                    />
+                  </div>
+                )}
                 <button
                   type="submit"
                   disabled={isSubmitting}
@@ -423,7 +491,10 @@ export default function LandingPage() {
                     if (!isLogin) {
                       setFormData(prev => ({ 
                         ...prev, 
-                        name: "", 
+                        password: "",
+                        password_confirm: "",
+                        first_name: "", 
+                        last_name: "",
                         username: "", 
                         phone: "",
                         hospital_id: "",
@@ -441,6 +512,7 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="border-t border-[#ffe6c5] bg-[#fff3ea]/50 mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
@@ -457,7 +529,7 @@ export default function LandingPage() {
               <h4 className="font-semibold text-[#1a0000] mb-4">Product</h4>
               <ul className="space-y-2 text-sm text-[#740000]">
                 <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
+                  <a href="#features" className="hover:text-[#b90000] transition">
                     Features
                   </a>
                 </li>
@@ -477,7 +549,7 @@ export default function LandingPage() {
               <h4 className="font-semibold text-[#1a0000] mb-4">Company</h4>
               <ul className="space-y-2 text-sm text-[#740000]">
                 <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
+                  <a href="#about" className="hover:text-[#b90000] transition">
                     About
                   </a>
                 </li>
@@ -487,7 +559,7 @@ export default function LandingPage() {
                   </a>
                 </li>
                 <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
+                  <a href="#contact" className="hover:text-[#b90000] transition">
                     Contact
                   </a>
                 </li>

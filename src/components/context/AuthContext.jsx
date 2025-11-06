@@ -21,7 +21,18 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
-  const register = async (email, password, name, role, username, phone) => {
+  const register = async (
+    email, 
+    password, 
+    password_confirm,
+    first_name,
+    last_name,
+    username,
+    phone,
+    role,
+    hospital_id,
+    organization_id
+  ) => {
     setError(null)
     try {
       const registerEndpoint = `${API_BASE_URL}/accounts/api/register/`
@@ -30,25 +41,22 @@ export function AuthProvider({ children }) {
         throw new Error("API base URL not configured. Please check your environment variables.")
       }
 
-      // Split name into first_name and last_name
-      const nameParts = name.split(' ')
-      const first_name = nameParts[0] || ''
-      const last_name = nameParts.slice(1).join(' ') || ''
-
       // Generate a badge number (you might want to change this logic)
       const badge_number = `BADGE${Date.now().toString().slice(-6)}`
 
       // Create request body matching your UserRegistrationSerializer
       const requestBody = {
         badge_number: badge_number,
-        username: username || email.split('@')[0],
+        username: username,
         email: email,
         phone: phone || '',
         password: password,
-        password_confirm: password,
+        password_confirm: password_confirm,
         role: role,
         first_name: first_name,
         last_name: last_name,
+        hospital_id: hospital_id || null,
+        organization_id: organization_id || null,
         registration_number: '',
         emergency_contact_name: '',
         emergency_contact_phone: ''
@@ -82,6 +90,8 @@ export function AuthProvider({ children }) {
         last_name: data.user.last_name,
         username: data.user.username,
         id: data.user.id,
+        hospital: data.user.hospital,
+        organization: data.user.organization,
         ...data.user
       }
       
@@ -132,6 +142,8 @@ export function AuthProvider({ children }) {
         last_name: data.user.last_name,
         username: data.user.username,
         id: data.user.id,
+        hospital: data.user.hospital,
+        organization: data.user.organization,
         token: data.tokens.access,
         refresh_token: data.tokens.refresh,
         ...data.user
