@@ -4,6 +4,7 @@ import { Sidebar } from "../SideBar"
 import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { apiClient } from "../../utils/api"
+import { useAuth } from "../context/AuthContext"
 
 export default function HospitalStaffDashboard() {
     const [patients, setPatients] = useState([])
@@ -14,8 +15,9 @@ export default function HospitalStaffDashboard() {
     const [showPreparationModal, setShowPreparationModal] = useState(false)
     const [selectedCommunication, setSelectedCommunication] = useState(null)
     const [isLoading, setIsLoading] = useState(true)
+    const { user } = useAuth()
 
-    // Mock hospitals data
+    // Mock hospitals data - should match registration hospitals
     const HOSPITALS = [
         { id: 1, name: "Aga Khan University Hospital", location: "Nairobi" },
         { id: 2, name: "Kenyatta National Hospital", location: "Nairobi" },
@@ -39,67 +41,78 @@ export default function HospitalStaffDashboard() {
         activeIncidents: 0
     })
 
-    // Initialize current hospital
+    // Initialize current hospital based on user's registered hospital
     useEffect(() => {
         const savedHospital = localStorage.getItem('currentHospital')
         if (savedHospital) {
             setCurrentHospital(JSON.parse(savedHospital))
-        } else {
-            // Default to Aga Khan Hospital
-            setCurrentHospital(HOSPITALS[0])
-        }
-    }, [])
-
-    // Fetch all communications and filter by hospital
-    const fetchHospitalCommunications = async () => {
-        try {
-            const response = await apiClient.get('/hospital-comms/api/communications/hospital-pending/')
-            const communications = response.data || []
-            setAllCommunications(communications)
-            
-            // Client-side filtering
-            if (currentHospital) {
-                const filtered = communications.filter(comm => 
-                    comm.hospital_id === currentHospital.id || 
-                    comm.hospital_name?.includes(currentHospital.name) ||
-                    (comm.vital_signs && typeof comm.vital_signs === 'string' && 
-                     comm.vital_signs.includes(currentHospital.name))
-                )
-                setHospitalCommunications(filtered)
-            } else {
-                setHospitalCommunications(communications)
+        } else if (user?.hospital_id) {
+            // Set hospital based on user's registration
+            const userHospital = HOSPITALS.find(h => h.id === user.hospital_id)
+            if (userHospital) {
+                setCurrentHospital(userHospital)
+                localStorage.setItem('currentHospital', JSON.stringify(userHospital))
             }
-
-        } catch (error) {
-            console.error('Failed to fetch communications:', error)
-            setAllCommunications([])
-            setHospitalCommunications([])
+        } else {
+            // Default to first hospital
+            setCurrentHospital(HOSPITALS[0])
+            localStorage.setItem('currentHospital', JSON.stringify(HOSPITALS[0]))
         }
-    }
+    }, [user])
 
-    // Filter communications when hospital changes
-    useEffect(() => {
-        if (currentHospital && allCommunications.length > 0) {
-            const filtered = allCommunications.filter(comm => 
-                comm.hospital_id === currentHospital.id || 
-                comm.hospital_name?.includes(currentHospital.name)
-            )
-            setHospitalCommunications(filtered)
+    // Fetch communications specifically for the current hospital
+    const fetchHospitalCommunications = async () => {
+        if (!currentHospital) return
+        
+        try {
+            // Try to fetch communications specifically for this hospital
+            const response = await apiClient.get(`/hospital-comms/api/communications/hospital/${currentHospital.id}/`)
+            const communications = response.data || []
             
+            setAllCommunications(communications)
+            setHospitalCommunications(communications)
+
             // Update stats
             setStats(prev => ({
                 ...prev,
-                pendingCommunications: filtered.filter(c => 
+                pendingCommunications: communications.filter(c => 
                     ['sent', 'acknowledged'].includes(c.status)
                 ).length
             }))
+
+        } catch (error) {
+            console.error('Failed to fetch hospital-specific communications:', error)
+            // Fallback to fetching all and filtering client-side
+            try {
+                const response = await apiClient.get('/hospital-comms/api/communications/')
+                const allComms = response.data || []
+                
+                // Client-side filtering by hospital_id
+                const filteredComms = allComms.filter(comm => 
+                    comm.hospital_id === currentHospital.id
+                )
+                
+                setAllCommunications(filteredComms)
+                setHospitalCommunications(filteredComms)
+                
+                setStats(prev => ({
+                    ...prev,
+                    pendingCommunications: filteredComms.filter(c => 
+                        ['sent', 'acknowledged'].includes(c.status)
+                    ).length
+                }))
+            } catch (fallbackError) {
+                console.error('Fallback fetch also failed:', fallbackError)
+                setAllCommunications([])
+                setHospitalCommunications([])
+            }
         }
-    }, [currentHospital, allCommunications])
+    }
 
     // Fetch patients data
     const fetchPatients = async () => {
         try {
-            // Mock patients data
+            // Mock patients data - in real app, filter by current hospital
             setPatients([
                 {
                     id: "P001",
@@ -118,24 +131,33 @@ export default function HospitalStaffDashboard() {
                     admittedAt: "30 mins ago",
                 },
             ])
+            
+            // Update stats
+            setStats(prev => ({
+                ...prev,
+                activePatients: 2,
+                criticalCases: 1
+            }))
         } catch (error) {
             console.error('Failed to fetch patients:', error)
             setPatients([])
         }
     }
 
-    // Load all data
+    // Load all data when hospital changes
     useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true)
-            await Promise.all([
-                fetchHospitalCommunications(),
-                fetchPatients()
-            ])
-            setIsLoading(false)
+        if (currentHospital) {
+            const loadData = async () => {
+                setIsLoading(true)
+                await Promise.all([
+                    fetchHospitalCommunications(),
+                    fetchPatients()
+                ])
+                setIsLoading(false)
+            }
+            loadData()
         }
-        loadData()
-    }, [])
+    }, [currentHospital])
 
     // Hospital selector component
     const HospitalSelector = () => (
@@ -143,7 +165,12 @@ export default function HospitalStaffDashboard() {
             <div className="flex items-center justify-between">
                 <div>
                     <h3 className="font-semibold text-[#1a0000]">Hospital Selection</h3>
-                    <p className="text-sm text-[#740000]">Select your hospital to view relevant communications</p>
+                    <p className="text-sm text-[#740000]">
+                        {user?.hospital_id 
+                            ? `You are registered to: ${HOSPITALS.find(h => h.id === user.hospital_id)?.name || currentHospital?.name}`
+                            : 'Select your hospital to view relevant communications'
+                        }
+                    </p>
                 </div>
                 <select
                     value={currentHospital?.id || ''}
@@ -154,6 +181,7 @@ export default function HospitalStaffDashboard() {
                         localStorage.setItem('currentHospital', JSON.stringify(hospital))
                     }}
                     className="px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000]"
+                    disabled={!!user?.hospital_id} // Disable if user is registered to specific hospital
                 >
                     {HOSPITALS.map(hospital => (
                         <option key={hospital.id} value={hospital.id}>
@@ -167,9 +195,14 @@ export default function HospitalStaffDashboard() {
                     Currently viewing communications for: <strong>{currentHospital.name}</strong>
                     {allCommunications.length > 0 && (
                         <span className="text-[#740000] ml-2">
-                            ({hospitalCommunications.length} of {allCommunications.length} total communications)
+                            ({hospitalCommunications.length} communications)
                         </span>
                     )}
+                </div>
+            )}
+            {user?.hospital_id && (
+                <div className="mt-2 text-xs text-[#b90000]">
+                    * Your account is registered to this hospital. Contact admin to change.
                 </div>
             )}
         </div>
@@ -207,7 +240,8 @@ export default function HospitalStaffDashboard() {
             
             await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/acknowledge/`, {
                 acknowledged_by: currentUser.id,
-                preparation_notes: acknowledgeData.preparation_notes
+                preparation_notes: acknowledgeData.preparation_notes,
+                hospital_id: currentHospital.id // Include hospital ID for verification
             })
 
             // Refresh communications
@@ -226,7 +260,10 @@ export default function HospitalStaffDashboard() {
         e.preventDefault()
         try {
             await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`, 
-                preparationData
+                {
+                    ...preparationData,
+                    hospital_id: currentHospital.id // Include hospital ID for verification
+                }
             )
 
             // Refresh communications
@@ -396,11 +433,6 @@ export default function HospitalStaffDashboard() {
                                                     : 'Please select a hospital'
                                                 }
                                             </p>
-                                            {allCommunications.length > 0 && currentHospital && (
-                                                <p className="text-sm text-[#740000] mt-2">
-                                                    There are {allCommunications.length} total communications in the system.
-                                                </p>
-                                            )}
                                         </div>
                                     ) : (
                                         hospitalCommunications.map((communication) => (

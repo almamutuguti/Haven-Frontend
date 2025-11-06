@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "./context/AuthContext"
 import { AlertCircle, Heart, Users, Shield, AlertTriangle } from "lucide-react"
@@ -9,6 +9,8 @@ export default function LandingPage() {
   const [isLogin, setIsLogin] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [hospitals, setHospitals] = useState([])
+  const [organizations, setOrganizations] = useState([])
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -16,10 +18,33 @@ export default function LandingPage() {
     username: "",
     phone: "",
     role: "hospital_staff",
+    hospital_id: "",
+    organization_id: ""
   })
   const { login, register, user } = useAuth()
   const navigate = useNavigate()
   const authSectionRef = useRef(null)
+
+  // Mock data for hospitals and organizations - replace with actual API calls
+  useEffect(() => {
+    // In a real app, you would fetch this from your backend
+    const mockHospitals = [
+      { id: "1", name: "General Hospital Central" },
+      { id: "2", name: "City Medical Center" },
+      { id: "3", name: "Community Health Hospital" },
+      { id: "4", name: "Regional Trauma Center" }
+    ]
+    
+    const mockOrganizations = [
+      { id: "1", name: "Red Cross Society" },
+      { id: "2", name: "St. John Ambulance" },
+      { id: "3", name: "Emergency Response Team" },
+      { id: "4", name: "Community First Aid Volunteers" }
+    ]
+    
+    setHospitals(mockHospitals)
+    setOrganizations(mockOrganizations)
+  }, [])
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -36,7 +61,9 @@ export default function LandingPage() {
       name: "", 
       username: "", 
       phone: "", 
-      role: "hospital_staff" 
+      role: "hospital_staff",
+      hospital_id: "",
+      organization_id: ""
     })
     setTimeout(() => {
       authSectionRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -65,6 +92,15 @@ export default function LandingPage() {
         if (!formData.name || !formData.username) {
           throw new Error("Full name and username are required for registration")
         }
+
+        // Validate role-specific fields
+        if (formData.role === "hospital_staff" && !formData.hospital_id) {
+          throw new Error("Please select a hospital")
+        }
+
+        if (formData.role === "first_aider" && !formData.organization_id) {
+          throw new Error("Please select an organization")
+        }
         
         await register(
           formData.email, 
@@ -72,12 +108,21 @@ export default function LandingPage() {
           formData.name, 
           formData.role, 
           formData.username, 
-          formData.phone
+          formData.phone,
+          formData.hospital_id,
+          formData.organization_id
         )
         
         alert("Registration successful! Please login with your credentials.")
         setIsLogin(true)
-        setFormData(prev => ({ ...prev, name: "", username: "", phone: "" }))
+        setFormData(prev => ({ 
+          ...prev, 
+          name: "", 
+          username: "", 
+          phone: "",
+          hospital_id: "",
+          organization_id: ""
+        }))
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An error occurred"
@@ -89,7 +134,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
+    <div className="min-h-screen bg-linear-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
       <nav className="border-b border-[#ffe6c5] bg-[#fff3ea]/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -217,7 +262,7 @@ export default function LandingPage() {
             <div className="p-6 pt-0">
               {formError && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex gap-2">
-                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                   <p className="text-sm text-red-700">{formError}</p>
                 </div>
               )}
@@ -266,6 +311,70 @@ export default function LandingPage() {
                         className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <label htmlFor="role" className="block text-sm font-medium text-[#1a0000]">
+                        Role
+                      </label>
+                      <select
+                        id="role"
+                        name="role"
+                        value={formData.role}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                      >
+                        <option value="hospital_staff">Hospital Staff</option>
+                        <option value="first_aider">First-Aider</option>
+                        <option value="system_admin">System Administrator</option>
+                      </select>
+                    </div>
+                    
+                    {/* Hospital Selection for Hospital Staff */}
+                    {formData.role === "hospital_staff" && (
+                      <div className="space-y-2">
+                        <label htmlFor="hospital_id" className="block text-sm font-medium text-[#1a0000]">
+                          Select Hospital
+                        </label>
+                        <select
+                          id="hospital_id"
+                          name="hospital_id"
+                          value={formData.hospital_id}
+                          onChange={handleInputChange}
+                          required={formData.role === "hospital_staff"}
+                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                        >
+                          <option value="">Select a hospital</option>
+                          {hospitals.map((hospital) => (
+                            <option key={hospital.id} value={hospital.id}>
+                              {hospital.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Organization Selection for First-Aiders */}
+                    {formData.role === "first_aider" && (
+                      <div className="space-y-2">
+                        <label htmlFor="organization_id" className="block text-sm font-medium text-[#1a0000]">
+                          Select Organization
+                        </label>
+                        <select
+                          id="organization_id"
+                          name="organization_id"
+                          value={formData.organization_id}
+                          onChange={handleInputChange}
+                          required={formData.role === "first_aider"}
+                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                        >
+                          <option value="">Select an organization</option>
+                          {organizations.map((org) => (
+                            <option key={org.id} value={org.id}>
+                              {org.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </>
                 )}
                 <div className="space-y-2">
@@ -298,24 +407,6 @@ export default function LandingPage() {
                     className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                   />
                 </div>
-                {!isLogin && (
-                  <div className="space-y-2">
-                    <label htmlFor="role" className="block text-sm font-medium text-[#1a0000]">
-                      Role
-                    </label>
-                    <select
-                      id="role"
-                      name="role"
-                      value={formData.role}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                    >
-                      <option value="hospital_staff">Hospital Staff</option>
-                      <option value="first_aider">First-Aider</option>
-                      <option value="system_admin">System Administrator</option>
-                    </select>
-                  </div>
-                )}
                 <button
                   type="submit"
                   disabled={isSubmitting}
@@ -330,7 +421,14 @@ export default function LandingPage() {
                     setIsLogin(!isLogin)
                     setFormError(null)
                     if (!isLogin) {
-                      setFormData(prev => ({ ...prev, name: "", username: "", phone: "" }))
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        name: "", 
+                        username: "", 
+                        phone: "",
+                        hospital_id: "",
+                        organization_id: ""
+                      }))
                     }
                   }}
                   className="text-sm text-[#b90000] hover:text-[#740000] transition-colors"

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
 import { Sidebar } from "../SideBar"
 import {
     Heart, Phone, AlertCircle, MapPin, Navigation, Radio, Clock,
@@ -94,7 +93,7 @@ export default function FirstAiderDashboard() {
     // Hospital Communication Form Data
     const [hospitalCommunicationData, setHospitalCommunicationData] = useState({
         emergency_alert_id: "",
-        hospital: "",
+        hospital_id: "",
         priority: "high",
         victim_name: "",
         victim_age: "",
@@ -183,6 +182,73 @@ export default function FirstAiderDashboard() {
         { value: "unknown", label: "Unknown" }
     ]
 
+    // Condition options
+    const conditionOptions = [
+        { value: "critical", label: "Critical" },
+        { value: "serious", label: "Serious" },
+        { value: "stable", label: "Stable" },
+        { value: "guarded", label: "Guarded" }
+    ]
+
+    // Consciousness options
+    const consciousnessOptions = [
+        { value: "alert", label: "Alert" },
+        { value: "verbal", label: "Responds to Verbal" },
+        { value: "pain", label: "Responds to Pain" },
+        { value: "unresponsive", label: "Unresponsive" }
+    ]
+
+    // Breathing options
+    const breathingOptions = [
+        { value: "normal", label: "Normal" },
+        { value: "labored", label: "Labored" },
+        { value: "shallow", label: "Shallow" },
+        { value: "absent", label: "Absent" }
+    ]
+
+    // Circulation options
+    const circulationOptions = [
+        { value: "normal", label: "Normal" },
+        { value: "weak", label: "Weak Pulse" },
+        { value: "absent", label: "Absent Pulse" },
+        { value: "irregular", label: "Irregular" }
+    ]
+
+    // GCS Eye options
+    const gcsEyesOptions = [
+        { value: "4", label: "4 - Spontaneous" },
+        { value: "3", label: "3 - To Voice" },
+        { value: "2", label: "2 - To Pain" },
+        { value: "1", label: "1 - None" }
+    ]
+
+    // GCS Verbal options
+    const gcsVerbalOptions = [
+        { value: "5", label: "5 - Oriented" },
+        { value: "4", label: "4 - Confused" },
+        { value: "3", label: "3 - Inappropriate" },
+        { value: "2", label: "2 - Incomprehensible" },
+        { value: "1", label: "1 - None" }
+    ]
+
+    // GCS Motor options
+    const gcsMotorOptions = [
+        { value: "6", label: "6 - Obeys Commands" },
+        { value: "5", label: "5 - Localizes Pain" },
+        { value: "4", label: "4 - Withdraws from Pain" },
+        { value: "3", label: "3 - Flexion to Pain" },
+        { value: "2", label: "2 - Extension to Pain" },
+        { value: "1", label: "1 - None" }
+    ]
+
+    // Pain level options
+    const painLevelOptions = [
+        { value: "0", label: "0 - No Pain" },
+        { value: "1-3", label: "1-3 - Mild" },
+        { value: "4-6", label: "4-6 - Moderate" },
+        { value: "7-10", label: "7-10 - Severe" }
+    ]
+
     // Fetch hospitals for selection
     const fetchHospitals = async () => {
         try {
@@ -193,7 +259,6 @@ export default function FirstAiderDashboard() {
             setHospitals(response.data || [])
         } catch (error) {
             console.error('Failed to fetch hospitals:', error)
-            // Fallback hospitals
             setHospitals([
                 { id: 1, name: "Aga Khan University Hospital", location: "Nairobi" },
                 { id: 2, name: "Kenyatta National Hospital", location: "Nairobi" },
@@ -235,7 +300,7 @@ export default function FirstAiderDashboard() {
         }
     }
 
-    // Fetch hospital communications
+    // Fetch hospital communications for this first aider
     const fetchHospitalCommunications = async () => {
         try {
             const response = await apiClient.get('/hospital-comms/api/communications/first-aider-active/')
@@ -401,7 +466,6 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
-            // Update status
             await apiClient.post(`/emergencies/${selectedAssignment.id}/status/`, {
                 status: statusUpdateData.status,
                 details: statusUpdateData.details
@@ -409,10 +473,8 @@ export default function FirstAiderDashboard() {
 
             setFormSuccess("Status updated successfully!")
             
-            // Refresh assignments
             fetchActiveEmergencies()
             
-            // Close form after 2 seconds
             setTimeout(() => {
                 setShowStatusUpdateForm(false)
                 setSelectedAssignment(null)
@@ -506,6 +568,8 @@ export default function FirstAiderDashboard() {
 
     // Generate assessment summary
     const generateAssessmentSummary = (assessment, victim) => {
+        const gcsScore = `${assessment.gcs_eyes || 0} + ${assessment.gcs_verbal || 0} + ${assessment.gcs_motor || 0} = ${(parseInt(assessment.gcs_eyes) || 0) + (parseInt(assessment.gcs_verbal) || 0) + (parseInt(assessment.gcs_motor) || 0)}`
+        
         return {
             victimName: `${assessment.firstName} ${assessment.lastName}`.trim() || victim?.name || "Unknown Victim",
             timestamp: new Date().toLocaleString(),
@@ -520,7 +584,7 @@ export default function FirstAiderDashboard() {
                 temperature: assessment.temperature,
                 respiratoryRate: assessment.respiratoryRate,
                 oxygenSaturation: assessment.oxygenSaturation,
-                gcsScore: `${assessment.gcs_eyes || ''}-${assessment.gcs_verbal || ''}-${assessment.gcs_motor || ''}`,
+                gcsScore: gcsScore,
                 bloodGlucose: assessment.bloodGlucose
             },
             symptoms: assessment.symptoms,
@@ -570,11 +634,9 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
-            // Generate assessment summary
             const summary = generateAssessmentSummary(victimAssessment, selectedVictim)
             setAssessmentSummary(summary)
 
-            // If this assessment is linked to a hospital communication, submit it
             if (selectedVictim?.communicationId) {
                 const assessmentData = {
                     heart_rate: victimAssessment.heartRate || null,
@@ -602,7 +664,6 @@ export default function FirstAiderDashboard() {
                 await apiClient.post(`/hospital-comms/api/communications/${selectedVictim.communicationId}/add-assessment/`, assessmentData)
             }
 
-            // Update local victims data
             if (selectedVictim) {
                 setVictims(prev => prev.map(victim => 
                     victim.id === selectedVictim.id 
@@ -621,7 +682,6 @@ export default function FirstAiderDashboard() {
                         : victim
                 ))
             } else {
-                // Add new victim
                 const newVictim = {
                     id: `victim-${Date.now()}`,
                     name: summary.victimName,
@@ -639,7 +699,6 @@ export default function FirstAiderDashboard() {
                 setVictims(prev => [...prev, newVictim])
             }
 
-            // Close assessment form and show summary
             setShowVictimAssessmentForm(false)
             setShowAssessmentSummary(true)
 
@@ -664,7 +723,7 @@ export default function FirstAiderDashboard() {
         setSelectedVictim(victim)
         setHospitalCommunicationData({
             emergency_alert_id: victim?.id || "",
-            hospital: "",
+            hospital_id: "",
             priority: victim?.status === "critical" ? "critical" : "high",
             victim_name: victim?.name || "",
             victim_age: "",
@@ -688,11 +747,20 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
-            const selectedHospitalObj = hospitals.find(h => h.id == hospitalCommunicationData.hospital)
+            if (!hospitalCommunicationData.hospital_id) {
+                throw new Error("Please select a hospital")
+            }
+
+            const selectedHospital = hospitals.find(h => h.id == hospitalCommunicationData.hospital_id)
             
-            const response = await apiClient.post('/hospital-comms/api/communications/', {
+            if (!selectedHospital) {
+                throw new Error("Selected hospital not found")
+            }
+
+            const communicationData = {
                 emergency_alert_id: hospitalCommunicationData.emergency_alert_id,
-                hospital: hospitalCommunicationData.hospital,
+                hospital_id: hospitalCommunicationData.hospital_id,
+                hospital_name: selectedHospital.name,
                 priority: hospitalCommunicationData.priority,
                 victim_name: hospitalCommunicationData.victim_name,
                 victim_age: hospitalCommunicationData.victim_age,
@@ -700,31 +768,35 @@ export default function FirstAiderDashboard() {
                 chief_complaint: hospitalCommunicationData.chief_complaint,
                 vital_signs: JSON.stringify({
                     data: hospitalCommunicationData.vital_signs,
-                    target_hospital: selectedHospitalObj?.name,
-                    target_hospital_id: selectedHospitalObj?.id
+                    target_hospital: selectedHospital.name,
+                    target_hospital_id: selectedHospital.id
                 }),
                 first_aid_provided: hospitalCommunicationData.first_aid_provided,
                 estimated_arrival_minutes: hospitalCommunicationData.estimated_arrival_minutes,
                 required_specialties: hospitalCommunicationData.required_specialties,
                 equipment_needed: hospitalCommunicationData.equipment_needed,
                 blood_type_required: hospitalCommunicationData.blood_type_required
-            })
+            }
             
-            setFormSuccess(`Communication sent to ${selectedHospitalObj?.name} successfully!`)
+            const response = await apiClient.post('/hospital-comms/api/communications/', communicationData)
             
-            // Update victim with communication info
+            setFormSuccess(`Communication sent to ${selectedHospital.name} successfully!`)
+            
             if (selectedVictim) {
                 setVictims(prev => prev.map(victim => 
                     victim.id === selectedVictim.id 
-                        ? { ...victim, hasCommunication: true, communicationId: response.data.id }
+                        ? { 
+                            ...victim, 
+                            hasCommunication: true, 
+                            communicationId: response.data.id,
+                            targetHospital: selectedHospital.name
+                        }
                         : victim
                 ))
             }
 
-            // Refresh communications
-            fetchHospitalCommunications()
+            await fetchHospitalCommunications()
             
-            // Close form after 2 seconds
             setTimeout(() => {
                 setShowHospitalCommunicationForm(false)
                 setSelectedVictim(null)
@@ -732,7 +804,7 @@ export default function FirstAiderDashboard() {
 
         } catch (error) {
             console.error('Hospital communication failed:', error)
-            setFormError(error.response?.data?.message || "Failed to send hospital communication")
+            setFormError(error.response?.data?.message || error.message || "Failed to send hospital communication")
         } finally {
             setIsSubmitting(false)
         }
@@ -760,10 +832,8 @@ export default function FirstAiderDashboard() {
             
             setFormSuccess("Communication status updated successfully!")
             
-            // Refresh communications
-            fetchHospitalCommunications()
+            await fetchHospitalCommunications()
             
-            // Close form after 2 seconds
             setTimeout(() => {
                 setShowCommunicationStatusForm(false)
                 setSelectedCommunication(null)
@@ -1380,10 +1450,1284 @@ export default function FirstAiderDashboard() {
                     </div>
                 </div>
 
-                {/* All Modals remain the same as in your previous implementation */}
-                {/* Emergency Form Modal, Status Update Modal, Hospital Communication Modal, etc. */}
-                {/* ... */}
+                {/* Emergency Form Modal */}
+                {showEmergencyForm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Report Emergency</h2>
+                                <button
+                                    onClick={() => setShowEmergencyForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleSubmitEmergency} className="p-6 space-y-4">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000] rounded text-[#b90000] text-sm">
+                                        {formError}
+                                    </div>
+                                )}
+                                {formSuccess && (
+                                    <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
+                                        {formSuccess}
+                                    </div>
+                                )}
 
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Emergency Type
+                                    </label>
+                                    <select
+                                        name="emergency_type"
+                                        value={emergencyData.emergency_type}
+                                        onChange={handleInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    >
+                                        {emergencyTypes.map(type => (
+                                            <option key={type.value} value={type.value}>
+                                                {type.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        name="description"
+                                        value={emergencyData.description}
+                                        onChange={handleInputChange}
+                                        rows={3}
+                                        placeholder="Describe the emergency situation..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Location
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={getCurrentLocation}
+                                            disabled={isSubmitting}
+                                            className="text-sm text-[#b90000] hover:text-[#740000] flex items-center gap-1"
+                                        >
+                                            <Compass className="w-4 h-4" />
+                                            Use Current Location
+                                        </button>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        name="address"
+                                        value={emergencyData.address}
+                                        onChange={handleInputChange}
+                                        placeholder="Address or location"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Latitude
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="latitude"
+                                            value={emergencyData.latitude}
+                                            onChange={handleInputChange}
+                                            placeholder="e.g., -1.2921"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Longitude
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="longitude"
+                                            value={emergencyData.longitude}
+                                            onChange={handleInputChange}
+                                            placeholder="e.g., 36.8219"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEmergencyForm(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? "Submitting..." : "Report Emergency"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Status Update Modal */}
+                {showStatusUpdateForm && selectedAssignment && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Update Assignment Status</h2>
+                                <button
+                                    onClick={() => setShowStatusUpdateForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleStatusUpdate} className="p-6 space-y-4">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000] rounded text-[#b90000] text-sm">
+                                        {formError}
+                                    </div>
+                                )}
+                                {formSuccess && (
+                                    <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
+                                        {formSuccess}
+                                    </div>
+                                )}
+
+                                <div className="bg-[#ffe6c5] p-4 rounded-lg">
+                                    <h3 className="font-semibold text-[#1a0000] mb-2">{selectedAssignment.type}</h3>
+                                    <p className="text-sm text-[#740000]">{selectedAssignment.location}</p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Status
+                                    </label>
+                                    <select
+                                        name="status"
+                                        value={statusUpdateData.status}
+                                        onChange={handleStatusInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    >
+                                        {statusOptions.map(status => (
+                                            <option key={status.value} value={status.value}>
+                                                {status.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Update Details
+                                    </label>
+                                    <textarea
+                                        name="details"
+                                        value={statusUpdateData.details}
+                                        onChange={handleStatusInputChange}
+                                        rows={3}
+                                        placeholder="Provide details about the current situation..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowStatusUpdateForm(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? "Updating..." : "Update Status"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Victim Assessment Modal */}
+                {showVictimAssessmentForm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">
+                                    {selectedVictim ? 'Update Victim Assessment' : 'New Victim Assessment'}
+                                </h2>
+                                <button
+                                    onClick={() => setShowVictimAssessmentForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleVictimAssessment} className="p-6 space-y-6">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000] rounded text-[#b90000] text-sm">
+                                        {formError}
+                                    </div>
+                                )}
+                                {formSuccess && (
+                                    <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
+                                        {formSuccess}
+                                    </div>
+                                )}
+
+                                {/* Personal Information */}
+                                <div className="grid md:grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            First Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="firstName"
+                                            value={victimAssessment.firstName}
+                                            onChange={handleAssessmentInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Last Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="lastName"
+                                            value={victimAssessment.lastName}
+                                            onChange={handleAssessmentInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Age
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="age"
+                                            value={victimAssessment.age}
+                                            onChange={handleAssessmentInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Gender
+                                        </label>
+                                        <select
+                                            name="gender"
+                                            value={victimAssessment.gender}
+                                            onChange={handleAssessmentInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        >
+                                            <option value="">Select Gender</option>
+                                            {genderOptions.map(gender => (
+                                                <option key={gender.value} value={gender.value}>
+                                                    {gender.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Contact Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="contactNumber"
+                                            value={victimAssessment.contactNumber}
+                                            onChange={handleAssessmentInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Vital Signs */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Vital Signs</h3>
+                                    <div className="grid md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Heart Rate (bpm)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="heartRate"
+                                                value={victimAssessment.heartRate}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Blood Pressure
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="bloodPressure"
+                                                value={victimAssessment.bloodPressure}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="e.g., 120/80"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Temperature (°C)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="temperature"
+                                                value={victimAssessment.temperature}
+                                                onChange={handleAssessmentInputChange}
+                                                step="0.1"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid md:grid-cols-3 gap-4 mt-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Respiratory Rate
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="respiratoryRate"
+                                                value={victimAssessment.respiratoryRate}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Oxygen Saturation (%)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="oxygenSaturation"
+                                                value={victimAssessment.oxygenSaturation}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Blood Glucose (mg/dL)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                name="bloodGlucose"
+                                                value={victimAssessment.bloodGlucose}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Glasgow Coma Scale */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Glasgow Coma Scale</h3>
+                                    <div className="grid md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Eyes Response
+                                            </label>
+                                            <select
+                                                name="gcs_eyes"
+                                                value={victimAssessment.gcs_eyes}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                <option value="">Select</option>
+                                                {gcsEyesOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Verbal Response
+                                            </label>
+                                            <select
+                                                name="gcs_verbal"
+                                                value={victimAssessment.gcs_verbal}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                <option value="">Select</option>
+                                                {gcsVerbalOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Motor Response
+                                            </label>
+                                            <select
+                                                name="gcs_motor"
+                                                value={victimAssessment.gcs_motor}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                <option value="">Select</option>
+                                                {gcsMotorOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Symptoms & Injuries */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Symptoms & Injuries</h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-[#1a0000] mb-2">
+                                                Symptoms
+                                            </label>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                {symptomOptions.map(symptom => (
+                                                    <label key={symptom} className="flex items-center space-x-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={victimAssessment.symptoms.includes(symptom)}
+                                                            onChange={() => handleSymptomChange(symptom)}
+                                                            className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                                        />
+                                                        <span className="text-sm text-[#1a0000]">{symptom}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-[#1a0000] mb-2">
+                                                Injuries
+                                            </label>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                {injuryOptions.map(injury => (
+                                                    <label key={injury} className="flex items-center space-x-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={victimAssessment.injuries.includes(injury)}
+                                                            onChange={() => handleInjuryChange(injury)}
+                                                            className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                                        />
+                                                        <span className="text-sm text-[#1a0000]">{injury}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Pain Assessment */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Pain Assessment</h3>
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Pain Level
+                                            </label>
+                                            <select
+                                                name="painLevel"
+                                                value={victimAssessment.painLevel}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                <option value="">Select Pain Level</option>
+                                                {painLevelOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Pain Location
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="painLocation"
+                                                value={victimAssessment.painLocation}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="Where is the pain located?"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Medical History */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Medical History</h3>
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Current Medications
+                                            </label>
+                                            <textarea
+                                                name="medications"
+                                                value={victimAssessment.medications}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={2}
+                                                placeholder="List current medications..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Allergies
+                                            </label>
+                                            <textarea
+                                                name="allergies"
+                                                value={victimAssessment.allergies}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={2}
+                                                placeholder="List any allergies..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Medical History
+                                            </label>
+                                            <textarea
+                                                name="medicalHistory"
+                                                value={victimAssessment.medicalHistory}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={2}
+                                                placeholder="Relevant medical history..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Last Meal
+                                            </label>
+                                            <input
+                                                type="text"
+                                                name="lastMeal"
+                                                value={victimAssessment.lastMeal}
+                                                onChange={handleAssessmentInputChange}
+                                                placeholder="When did they last eat or drink?"
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Assessment & Treatment */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Assessment & Treatment</h3>
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Overall Condition
+                                            </label>
+                                            <select
+                                                name="condition"
+                                                value={victimAssessment.condition}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                {conditionOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Consciousness Level
+                                            </label>
+                                            <select
+                                                name="consciousness"
+                                                value={victimAssessment.consciousness}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                {consciousnessOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Breathing
+                                            </label>
+                                            <select
+                                                name="breathing"
+                                                value={victimAssessment.breathing}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                {breathingOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Circulation
+                                            </label>
+                                            <select
+                                                name="circulation"
+                                                value={victimAssessment.circulation}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                {circulationOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Triage Category
+                                            </label>
+                                            <select
+                                                name="triage_category"
+                                                value={victimAssessment.triage_category}
+                                                onChange={handleAssessmentInputChange}
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            >
+                                                {triageOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>
+                                                        {option.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-4 mt-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Treatment Provided
+                                            </label>
+                                            <textarea
+                                                name="treatmentProvided"
+                                                value={victimAssessment.treatmentProvided}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={3}
+                                                placeholder="Describe first aid and treatments provided..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Medications Administered
+                                            </label>
+                                            <textarea
+                                                name="medicationsAdministered"
+                                                value={victimAssessment.medicationsAdministered}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={2}
+                                                placeholder="List any medications administered..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Notes & Recommendations */}
+                                <div className="border-t border-[#ffe6c5] pt-6">
+                                    <h3 className="text-lg font-bold text-[#1a0000] mb-4">Notes & Recommendations</h3>
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Assessment Notes
+                                            </label>
+                                            <textarea
+                                                name="notes"
+                                                value={victimAssessment.notes}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={3}
+                                                placeholder="Additional assessment notes..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-medium text-[#1a0000]">
+                                                Recommendations
+                                            </label>
+                                            <textarea
+                                                name="recommendations"
+                                                value={victimAssessment.recommendations}
+                                                onChange={handleAssessmentInputChange}
+                                                rows={3}
+                                                placeholder="Recommendations for further care..."
+                                                className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-6 border-t border-[#ffe6c5]">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowVictimAssessmentForm(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? "Submitting..." : "Save Assessment"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Assessment Summary Modal */}
+                {showAssessmentSummary && assessmentSummary && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Assessment Summary</h2>
+                                <button
+                                    onClick={() => setShowAssessmentSummary(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-6">
+                                {/* Header */}
+                                <div className="bg-[#ffe6c5] p-4 rounded-lg">
+                                    <h3 className="text-xl font-bold text-[#1a0000]">{assessmentSummary.victimName}</h3>
+                                    <p className="text-[#740000]">Assessment completed: {assessmentSummary.timestamp}</p>
+                                    <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-2 ${
+                                        assessmentSummary.priority === "High" 
+                                            ? "bg-[#b90000]/10 text-[#b90000] border border-[#b90000]/20"
+                                            : assessmentSummary.priority === "Medium"
+                                            ? "bg-[#740000]/10 text-[#740000] border border-[#740000]/20"
+                                            : "bg-[#1a0000]/10 text-[#1a0000] border border-[#1a0000]/20"
+                                    }`}>
+                                        Priority: {assessmentSummary.priority}
+                                    </div>
+                                </div>
+
+                                {/* Personal Information */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Personal Information</h4>
+                                    <div className="grid md:grid-cols-3 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-[#740000]">Age:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.age || 'Not specified'}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Gender:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.gender || 'Not specified'}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Contact:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.contactNumber || 'Not specified'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Vital Signs */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Vital Signs</h4>
+                                    <div className="grid md:grid-cols-3 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-[#740000]">Heart Rate:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.heartRate || 'N/A'} bpm</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Blood Pressure:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.bloodPressure || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Temperature:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.temperature || 'N/A'} °C</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Respiratory Rate:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.respiratoryRate || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Oxygen Saturation:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.oxygenSaturation || 'N/A'}%</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">GCS Score:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.gcsScore || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Symptoms & Injuries */}
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Symptoms</h4>
+                                        {assessmentSummary.symptoms.length > 0 ? (
+                                            <ul className="list-disc list-inside text-sm text-[#1a0000] space-y-1">
+                                                {assessmentSummary.symptoms.map((symptom, index) => (
+                                                    <li key={index}>{symptom}</li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <p className="text-sm text-[#740000]">No symptoms reported</p>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Injuries</h4>
+                                        {assessmentSummary.injuries.length > 0 ? (
+                                            <ul className="list-disc list-inside text-sm text-[#1a0000] space-y-1">
+                                                {assessmentSummary.injuries.map((injury, index) => (
+                                                    <li key={index}>{injury}</li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <p className="text-sm text-[#740000]">No injuries reported</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Assessment */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Clinical Assessment</h4>
+                                    <div className="grid md:grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-[#740000]">Condition:</span>
+                                            <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.condition}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Consciousness:</span>
+                                            <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.consciousness}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Breathing:</span>
+                                            <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.breathing}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Circulation:</span>
+                                            <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.circulation}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-[#740000]">Triage Category:</span>
+                                            <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.triage}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Treatment & Notes */}
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Treatment Provided</h4>
+                                        <p className="text-sm text-[#1a0000] whitespace-pre-wrap">
+                                            {assessmentSummary.treatment.provided || 'No treatment documented'}
+                                        </p>
+                                        {assessmentSummary.treatment.medications && (
+                                            <div className="mt-2">
+                                                <span className="text-[#740000] text-sm">Medications:</span>
+                                                <p className="text-sm text-[#1a0000] whitespace-pre-wrap">
+                                                    {assessmentSummary.treatment.medications}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Notes & Recommendations</h4>
+                                        <div className="space-y-2">
+                                            {assessmentSummary.notes && (
+                                                <div>
+                                                    <span className="text-[#740000] text-sm">Notes:</span>
+                                                    <p className="text-sm text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.notes}</p>
+                                                </div>
+                                            )}
+                                            {assessmentSummary.recommendations && (
+                                                <div>
+                                                    <span className="text-[#740000] text-sm">Recommendations:</span>
+                                                    <p className="text-sm text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.recommendations}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-6 border-t border-[#ffe6c5]">
+                                    <button
+                                        onClick={() => setShowAssessmentSummary(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Close
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowAssessmentSummary(false);
+                                            handleOpenHospitalCommunication(selectedVictim);
+                                        }}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors"
+                                    >
+                                        Send to Hospital
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Hospital Communication Modal */}
+                {showHospitalCommunicationForm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Send Hospital Communication</h2>
+                                <button
+                                    onClick={() => setShowHospitalCommunicationForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleHospitalCommunication} className="p-6 space-y-4">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000] rounded text-[#b90000] text-sm">
+                                        {formError}
+                                    </div>
+                                )}
+                                {formSuccess && (
+                                    <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
+                                        {formSuccess}
+                                    </div>
+                                )}
+
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Select Hospital *
+                                        </label>
+                                        <select
+                                            name="hospital_id"
+                                            value={hospitalCommunicationData.hospital_id}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            required
+                                        >
+                                            <option value="">Choose a hospital</option>
+                                            {hospitals.map(hospital => (
+                                                <option key={hospital.id} value={hospital.id}>
+                                                    {hospital.name} - {hospital.location}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Priority
+                                        </label>
+                                        <select
+                                            name="priority"
+                                            value={hospitalCommunicationData.priority}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        >
+                                            {priorityOptions.map(priority => (
+                                                <option key={priority.value} value={priority.value}>
+                                                    {priority.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid md:grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Victim Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="victim_name"
+                                            value={hospitalCommunicationData.victim_name}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            placeholder="Full name"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Age
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="victim_age"
+                                            value={hospitalCommunicationData.victim_age}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            placeholder="Age"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Gender
+                                        </label>
+                                        <select
+                                            name="victim_gender"
+                                            value={hospitalCommunicationData.victim_gender}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        >
+                                            <option value="">Select</option>
+                                            {genderOptions.map(gender => (
+                                                <option key={gender.value} value={gender.value}>
+                                                    {gender.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Chief Complaint
+                                    </label>
+                                    <textarea
+                                        name="chief_complaint"
+                                        value={hospitalCommunicationData.chief_complaint}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        rows={2}
+                                        placeholder="Primary symptoms or injuries..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Vital Signs
+                                    </label>
+                                    <textarea
+                                        name="vital_signs"
+                                        value={hospitalCommunicationData.vital_signs}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        rows={2}
+                                        placeholder="Heart rate, BP, temperature, etc..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        First Aid Provided
+                                    </label>
+                                    <textarea
+                                        name="first_aid_provided"
+                                        value={hospitalCommunicationData.first_aid_provided}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        rows={2}
+                                        placeholder="First aid treatments administered..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                </div>
+
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Estimated Arrival (minutes)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="estimated_arrival_minutes"
+                                            value={hospitalCommunicationData.estimated_arrival_minutes}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Blood Type Required
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="blood_type_required"
+                                            value={hospitalCommunicationData.blood_type_required}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            placeholder="e.g., O+"
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Required Specialties
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="required_specialties"
+                                        value={hospitalCommunicationData.required_specialties}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        placeholder="e.g., Trauma, Cardiology, Neurology"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Equipment Needed
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="equipment_needed"
+                                        value={hospitalCommunicationData.equipment_needed}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        placeholder="e.g., Ventilator, Defibrillator, CT Scan"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowHospitalCommunicationForm(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? "Sending..." : "Send to Hospital"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Communication Status Update Modal */}
+                {showCommunicationStatusForm && selectedCommunication && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                                <h2 className="text-2xl font-bold text-[#1a0000]">Update Communication Status</h2>
+                                <button
+                                    onClick={() => setShowCommunicationStatusForm(false)}
+                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-[#1a0000]" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleCommunicationStatusUpdate} className="p-6 space-y-4">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000] rounded text-[#b90000] text-sm">
+                                        {formError}
+                                    </div>
+                                )}
+                                {formSuccess && (
+                                    <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
+                                        {formSuccess}
+                                    </div>
+                                )}
+
+                                <div className="bg-[#ffe6c5] p-4 rounded-lg">
+                                    <h3 className="font-semibold text-[#1a0000] mb-2">{selectedCommunication.victim_name}</h3>
+                                    <p className="text-sm text-[#740000]">Hospital: {selectedCommunication.hospital_name}</p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Status
+                                    </label>
+                                    <select
+                                        name="status"
+                                        value={communicationStatusData.status}
+                                        onChange={handleCommunicationStatusInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    >
+                                        {communicationStatusOptions.map(status => (
+                                            <option key={status.value} value={status.value}>
+                                                {status.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Notes
+                                    </label>
+                                    <textarea
+                                        name="notes"
+                                        value={communicationStatusData.notes}
+                                        onChange={handleCommunicationStatusInputChange}
+                                        rows={3}
+                                        placeholder="Additional notes about the status update..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCommunicationStatusForm(false)}
+                                        className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        {isSubmitting ? "Updating..." : "Update Status"}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+                
             </main>
         </div>
     )
