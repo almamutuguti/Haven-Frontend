@@ -17,15 +17,6 @@ export default function HospitalStaffDashboard() {
     const [isLoading, setIsLoading] = useState(true)
     const { user } = useAuth()
 
-    // Mock hospitals data - should match registration hospitals
-    const HOSPITALS = [
-        { id: 1, name: "Aga Khan University Hospital", location: "Nairobi" },
-        { id: 2, name: "Kenyatta National Hospital", location: "Nairobi" },
-        { id: 3, name: "Nairobi Hospital", location: "Nairobi" },
-        { id: 4, name: "Moi Teaching and Referral Hospital", location: "Eldoret" },
-        { id: 5, name: "Coast General Hospital", location: "Mombasa" }
-    ]
-
     // Form states
     const [acknowledgeData, setAcknowledgeData] = useState({ preparation_notes: "" })
     const [preparationData, setPreparationData] = useState({
@@ -43,19 +34,37 @@ export default function HospitalStaffDashboard() {
 
     // Initialize current hospital based on user's registered hospital
     useEffect(() => {
-        if (user?.hospital_id) {
-            // Set hospital based on user's registration
-            const userHospital = HOSPITALS.find(h => h.id === user.hospital_id)
-            if (userHospital) {
-                setCurrentHospital(userHospital)
-                localStorage.setItem('currentHospital', JSON.stringify(userHospital))
-            }
+        if (user?.hospital) {
+            // Use the hospital from user registration
+            setCurrentHospital(user.hospital)
+            localStorage.setItem('currentHospital', JSON.stringify(user.hospital))
+        } else if (user?.hospital_id) {
+            // If hospital is just an ID, fetch the hospital details
+            fetchHospitalDetails(user.hospital_id)
         } else {
-            // If no hospital_id in user, use the first hospital as fallback
-            setCurrentHospital(HOSPITALS[0])
-            localStorage.setItem('currentHospital', JSON.stringify(HOSPITALS[0]))
+            console.log('No hospital assigned to user:', user)
         }
     }, [user])
+
+    // Fetch hospital details by ID
+    const fetchHospitalDetails = async (hospitalId) => {
+        try {
+            const response = await apiClient.get(`/hospitals/${hospitalId}/`)
+            const hospitalData = response.data
+            setCurrentHospital(hospitalData)
+            localStorage.setItem('currentHospital', JSON.stringify(hospitalData))
+        } catch (error) {
+            console.error('Failed to fetch hospital details:', error)
+            // Fallback: create a basic hospital object from ID
+            const fallbackHospital = {
+                id: hospitalId,
+                name: `Hospital ${hospitalId}`,
+                location: "Unknown"
+            }
+            setCurrentHospital(fallbackHospital)
+            localStorage.setItem('currentHospital', JSON.stringify(fallbackHospital))
+        }
+    }
 
     // Fetch communications specifically for the current hospital
     const fetchHospitalCommunications = async () => {
@@ -156,7 +165,7 @@ export default function HospitalStaffDashboard() {
         }
     }, [currentHospital])
 
-    // Hospital info component (replaces selector)
+    // Hospital info component
     const HospitalInfo = () => (
         <div className="mb-6 p-4 bg-[#ffe6c5] rounded-lg border border-[#ffe6c5]">
             <div className="flex items-center justify-between">
@@ -184,7 +193,7 @@ export default function HospitalStaffDashboard() {
                     )}
                 </div>
             )}
-            {!user?.hospital_id && (
+            {!user?.hospital && !user?.hospital_id && (
                 <div className="mt-2 text-xs text-[#b90000]">
                     * Your account is not registered to a specific hospital. Contact admin to update your hospital assignment.
                 </div>
@@ -225,7 +234,7 @@ export default function HospitalStaffDashboard() {
             await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/acknowledge/`, {
                 acknowledged_by: currentUser.id,
                 preparation_notes: acknowledgeData.preparation_notes,
-                hospital_id: currentHospital.id // Include hospital ID for verification
+                hospital_id: currentHospital.id
             })
 
             // Refresh communications
@@ -246,7 +255,7 @@ export default function HospitalStaffDashboard() {
             await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`, 
                 {
                     ...preparationData,
-                    hospital_id: currentHospital.id // Include hospital ID for verification
+                    hospital_id: currentHospital.id
                 }
             )
 
@@ -582,12 +591,10 @@ export default function HospitalStaffDashboard() {
                                 </div>
                                 <div className="p-6 space-y-2">
                                     <p className="text-[#1a0000] font-medium">{currentHospital.name}</p>
-                                    <p className="text-sm text-[#740000]">{currentHospital.location}</p>
+                                    <p className="text-sm text-[#740000]">{currentHospital.location || 'Location not specified'}</p>
                                     <p className="text-sm text-[#740000]">Emergency: +254 700 123 456</p>
-                                    {!user?.hospital_id && (
-                                        <p className="text-xs text-[#b90000] mt-2">
-                                            * Contact administrator to update your hospital assignment
-                                        </p>
+                                    {currentHospital.phone && (
+                                        <p className="text-sm text-[#740000]">Phone: {currentHospital.phone}</p>
                                     )}
                                 </div>
                             </div>

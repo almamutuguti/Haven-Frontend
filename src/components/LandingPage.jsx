@@ -31,35 +31,35 @@ export default function LandingPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+        
         const [hospitalsRes, organizationsRes] = await Promise.all([
-          fetch('/api/hospitals/'),
-          fetch('/api/organizations/')
+          fetch(`${API_BASE_URL}/accounts/api/hospitals/`),
+          fetch(`${API_BASE_URL}/accounts/api/organizations/`)
         ])
         
         if (hospitalsRes.ok) {
           const hospitalsData = await hospitalsRes.json()
+          console.log('Fetched hospitals:', hospitalsData)
           setHospitals(hospitalsData)
+        } else {
+          console.error('Failed to fetch hospitals:', hospitalsRes.status)
+          setHospitals([])
         }
         
         if (organizationsRes.ok) {
           const organizationsData = await organizationsRes.json()
+          console.log('Fetched organizations:', organizationsData)
           setOrganizations(organizationsData)
+        } else {
+          console.error('Failed to fetch organizations:', organizationsRes.status)
+          setOrganizations([])
         }
       } catch (error) {
         console.error("Error fetching data:", error)
-        // Fallback mock data
-        setHospitals([
-          { id: "1", name: "General Hospital Central" },
-          { id: "2", name: "City Medical Center" },
-          { id: "3", name: "Community Health Hospital" },
-          { id: "4", name: "Regional Trauma Center" }
-        ])
-        setOrganizations([
-          { id: "1", name: "Red Cross Society" },
-          { id: "2", name: "St. John Ambulance" },
-          { id: "3", name: "Emergency Response Team" },
-          { id: "4", name: "Community First Aid Volunteers" }
-        ])
+        setHospitals([])
+        setOrganizations([])
+        setFormError("Failed to load hospitals and organizations. Please refresh the page.")
       }
     }
     
@@ -111,11 +111,11 @@ export default function LandingPage() {
         const redirectPath = roleMap[userRole] || "/dashboard/"
         navigate(redirectPath)
       } else {
+        // Validation
         if (!formData.first_name || !formData.last_name || !formData.username) {
           throw new Error("Full name and username are required for registration")
         }
 
-        // Validate role-specific fields
         if (formData.role === "hospital_staff" && !formData.hospital_id) {
           throw new Error("Please select a hospital")
         }
@@ -127,18 +127,25 @@ export default function LandingPage() {
         if (formData.password !== formData.password_confirm) {
           throw new Error("Passwords do not match")
         }
+
+        // Convert IDs to strings for backend (UUIDs)
+        const registrationData = {
+          ...formData,
+          hospital_id: formData.hospital_id ? String(formData.hospital_id) : null,
+          organization_id: formData.organization_id ? String(formData.organization_id) : null
+        }
         
         await register(
-          formData.email, 
-          formData.password,
-          formData.password_confirm,
-          formData.first_name,
-          formData.last_name,
-          formData.username,
-          formData.phone,
-          formData.role,
-          formData.hospital_id,
-          formData.organization_id
+          registrationData.email, 
+          registrationData.password,
+          registrationData.password_confirm,
+          registrationData.first_name,
+          registrationData.last_name,
+          registrationData.username,
+          registrationData.phone,
+          registrationData.role,
+          registrationData.hospital_id,
+          registrationData.organization_id
         )
         
         alert("Registration successful! Please login with your credentials.")
@@ -166,7 +173,6 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
-      {/* Navigation */}
       <nav className="border-b border-[#ffe6c5] bg-[#fff3ea]/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -189,7 +195,6 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
@@ -216,7 +221,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Feature Cards */}
           <div className="space-y-4">
             <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg p-6 hover:border-[#b90000] transition-colors">
               <div className="flex items-start gap-4">
@@ -255,7 +259,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Auth Section */}
       <section ref={authSectionRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div id="features" className="space-y-8">
@@ -285,7 +288,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Auth Form */}
           <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg shadow-sm sticky top-24">
             <div className="p-6 pb-4">
               <h3 className="text-2xl font-bold text-[#1a0000]">{isLogin ? "Welcome Back" : "Join Haven"}</h3>
@@ -302,13 +304,22 @@ export default function LandingPage() {
                   <p className="text-sm text-red-700">{formError}</p>
                 </div>
               )}
+              
+              {!isLogin && (hospitals.length === 0 || organizations.length === 0) && (
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-sm text-yellow-700">
+                    Loading hospitals and organizations... If this persists, please refresh the page.
+                  </p>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-4">
                 {!isLogin && (
                   <>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label htmlFor="first_name" className="block text-sm font-medium text-[#1a0000]">
-                          First Name
+                          First Name *
                         </label>
                         <input
                           id="first_name"
@@ -316,13 +327,13 @@ export default function LandingPage() {
                           placeholder="John"
                           value={formData.first_name}
                           onChange={handleInputChange}
-                          required={!isLogin}
+                          required
                           className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                         />
                       </div>
                       <div className="space-y-2">
                         <label htmlFor="last_name" className="block text-sm font-medium text-[#1a0000]">
-                          Last Name
+                          Last Name *
                         </label>
                         <input
                           id="last_name"
@@ -330,14 +341,14 @@ export default function LandingPage() {
                           placeholder="Doe"
                           value={formData.last_name}
                           onChange={handleInputChange}
-                          required={!isLogin}
+                          required
                           className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="username" className="block text-sm font-medium text-[#1a0000]">
-                        Username
+                        Username *
                       </label>
                       <input
                         id="username"
@@ -345,7 +356,7 @@ export default function LandingPage() {
                         placeholder="johndoe"
                         value={formData.username}
                         onChange={handleInputChange}
-                        required={!isLogin}
+                        required
                         className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                       />
                     </div>
@@ -357,7 +368,7 @@ export default function LandingPage() {
                         id="phone"
                         name="phone"
                         type="tel"
-                        placeholder="+1234567890 (optional)"
+                        placeholder="+254712345678"
                         value={formData.phone}
                         onChange={handleInputChange}
                         className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
@@ -365,7 +376,7 @@ export default function LandingPage() {
                     </div>
                     <div className="space-y-2">
                       <label htmlFor="role" className="block text-sm font-medium text-[#1a0000]">
-                        Role
+                        Role *
                       </label>
                       <select
                         id="role"
@@ -383,23 +394,29 @@ export default function LandingPage() {
                     {formData.role === "hospital_staff" && (
                       <div className="space-y-2">
                         <label htmlFor="hospital_id" className="block text-sm font-medium text-[#1a0000]">
-                          Select Hospital
+                          Select Hospital *
                         </label>
                         <select
                           id="hospital_id"
                           name="hospital_id"
                           value={formData.hospital_id}
                           onChange={handleInputChange}
-                          required={formData.role === "hospital_staff"}
-                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                          required
+                          disabled={hospitals.length === 0}
+                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent disabled:opacity-50"
                         >
-                          <option value="">Select a hospital</option>
+                          <option value="">{hospitals.length === 0 ? "Loading hospitals..." : "Select a hospital"}</option>
                           {hospitals.map((hospital) => (
                             <option key={hospital.id} value={hospital.id}>
                               {hospital.name}
                             </option>
                           ))}
                         </select>
+                        {hospitals.length === 0 && (
+                          <p className="text-xs text-[#740000] mt-1">
+                            No hospitals available. Please contact administrator.
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -407,30 +424,36 @@ export default function LandingPage() {
                     {formData.role === "first_aider" && (
                       <div className="space-y-2">
                         <label htmlFor="organization_id" className="block text-sm font-medium text-[#1a0000]">
-                          Select Organization
+                          Select Organization *
                         </label>
                         <select
                           id="organization_id"
                           name="organization_id"
                           value={formData.organization_id}
                           onChange={handleInputChange}
-                          required={formData.role === "first_aider"}
-                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                          required
+                          disabled={organizations.length === 0}
+                          className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent disabled:opacity-50"
                         >
-                          <option value="">Select an organization</option>
+                          <option value="">{organizations.length === 0 ? "Loading organizations..." : "Select an organization"}</option>
                           {organizations.map((org) => (
                             <option key={org.id} value={org.id}>
                               {org.name}
                             </option>
                           ))}
                         </select>
+                        {organizations.length === 0 && (
+                          <p className="text-xs text-[#740000] mt-1">
+                            No organizations available. Please contact administrator.
+                          </p>
+                        )}
                       </div>
                     )}
                   </>
                 )}
                 <div className="space-y-2">
                   <label htmlFor="email" className="block text-sm font-medium text-[#1a0000]">
-                    Email
+                    Email *
                   </label>
                   <input
                     id="email"
@@ -445,7 +468,7 @@ export default function LandingPage() {
                 </div>
                 <div className="space-y-2">
                   <label htmlFor="password" className="block text-sm font-medium text-[#1a0000]">
-                    Password
+                    Password *
                   </label>
                   <input
                     id="password"
@@ -461,7 +484,7 @@ export default function LandingPage() {
                 {!isLogin && (
                   <div className="space-y-2">
                     <label htmlFor="password_confirm" className="block text-sm font-medium text-[#1a0000]">
-                      Confirm Password
+                      Confirm Password *
                     </label>
                     <input
                       id="password_confirm"
@@ -470,15 +493,15 @@ export default function LandingPage() {
                       placeholder="••••••••"
                       value={formData.password_confirm}
                       onChange={handleInputChange}
-                      required={!isLogin}
+                      required
                       className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                     />
                   </div>
                 )}
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] font-semibold py-2 rounded-lg transition-colors disabled:opacity-50"
+                  disabled={isSubmitting || (!isLogin && ((formData.role === "hospital_staff" && hospitals.length === 0) || (formData.role === "first_aider" && organizations.length === 0)))}
+                  className="w-full bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] font-semibold py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? "Processing..." : isLogin ? "Sign In" : "Create Account"}
                 </button>
@@ -512,7 +535,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-[#ffe6c5] bg-[#fff3ea]/50 mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid md:grid-cols-4 gap-8 mb-8">

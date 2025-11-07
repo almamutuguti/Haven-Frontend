@@ -10,7 +10,7 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null)
 
   // Get base URL from environment variables
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -41,12 +41,8 @@ export function AuthProvider({ children }) {
         throw new Error("API base URL not configured. Please check your environment variables.")
       }
 
-      // Generate a badge number (you might want to change this logic)
-      const badge_number = `BADGE${Date.now().toString().slice(-6)}`
-
       // Create request body matching your UserRegistrationSerializer
       const requestBody = {
-        badge_number: badge_number,
         username: username,
         email: email,
         phone: phone || '',
@@ -55,18 +51,25 @@ export function AuthProvider({ children }) {
         role: role,
         first_name: first_name,
         last_name: last_name,
-        hospital_id: hospital_id || null,
-        organization_id: organization_id || null,
-        registration_number: '',
-        emergency_contact_name: '',
-        emergency_contact_phone: ''
+      }
+
+      // Only include hospital_id if it's provided and role is hospital_staff
+      if (role === 'hospital_staff' && hospital_id) {
+        requestBody.hospital_id = parseInt(hospital_id);
+      }
+
+      // Only include organization_id if it's provided and role is first_aider
+      if (role === 'first_aider' && organization_id) {
+        requestBody.organization_id = parseInt(organization_id);
       }
 
       console.log('Sending registration:', requestBody)
 
       const response = await fetch(registerEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(requestBody),
       })
 
@@ -75,6 +78,27 @@ export function AuthProvider({ children }) {
       if (!response.ok) {
         const errorData = await response.json()
         console.log('Django error response:', errorData)
+        
+        // Handle specific field errors
+        if (errorData.hospital_id) {
+          throw new Error(`Hospital: ${errorData.hospital_id[0]}`)
+        }
+        if (errorData.organization_id) {
+          throw new Error(`Organization: ${errorData.organization_id[0]}`)
+        }
+        if (errorData.email) {
+          throw new Error(`Email: ${errorData.email[0]}`)
+        }
+        if (errorData.username) {
+          throw new Error(`Username: ${errorData.username[0]}`)
+        }
+        if (errorData.password) {
+          throw new Error(`Password: ${errorData.password[0]}`)
+        }
+        if (errorData.non_field_errors) {
+          throw new Error(errorData.non_field_errors[0])
+        }
+        
         throw new Error(errorData.error || errorData.detail || JSON.stringify(errorData) || "Registration failed")
       }
 
@@ -118,7 +142,9 @@ export function AuthProvider({ children }) {
 
       const response = await fetch(loginEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ email, password }),
       })
 
