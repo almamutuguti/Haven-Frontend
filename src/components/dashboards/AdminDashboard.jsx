@@ -95,7 +95,7 @@ export default function AdminDashboard() {
   const fetchIncidentStats = async () => {
     try {
       // Fetch active emergencies
-      const response = await apiClient.get('/emergencies/active/')
+      const response = await apiClient.get('/emergencies/active')
       const activeEmergencies = response.data || []
 
       // Categorize incidents by type

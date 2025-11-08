@@ -15,8 +15,9 @@ const getAuthToken = () => {
   return null;
 };
 
+// Enhanced API client with better error handling and logging
 export const apiClient = {
-  async post(endpoint, data) {
+  async request(endpoint, options = {}) {
     const token = getAuthToken();
     
     console.log('Making API request to:', `${API_BASE_URL}${endpoint}`);
@@ -24,6 +25,7 @@ export const apiClient = {
 
     const headers = {
       'Content-Type': 'application/json',
+      ...options.headers,
     };
 
     // Add authorization header if token exists
@@ -32,14 +34,12 @@ export const apiClient = {
       console.log('Authorization header added with Bearer token');
     } else {
       console.warn('No authentication token found for API request');
-      // Don't throw error here - let the backend handle authentication
     }
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
+        ...options,
         headers,
-        body: JSON.stringify(data)
       });
 
       console.log('API Response status:', response.status);
@@ -62,7 +62,16 @@ export const apiClient = {
         } catch (e) {
           errorData = { error: `HTTP error! status: ${response.status}` };
         }
-        throw new Error(errorData.error || errorData.detail || `HTTP error! status: ${response.status}`);
+        
+        // Handle field-specific errors
+        if (errorData.emergency_alert_id || errorData.first_aider) {
+          const fieldErrors = [];
+          if (errorData.emergency_alert_id) fieldErrors.push(`Emergency Alert: ${errorData.emergency_alert_id.join(', ')}`);
+          if (errorData.first_aider) fieldErrors.push(`First Aider: ${errorData.first_aider.join(', ')}`);
+          throw new Error(fieldErrors.join('; '));
+        }
+        
+        throw new Error(errorData.error || errorData.detail || errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
@@ -75,32 +84,36 @@ export const apiClient = {
     }
   },
 
-  async get(endpoint) {
-    const token = getAuthToken();
-    
-    const headers = {
-      'Content-Type': 'application/json',
-    };
-
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      headers
+  async post(endpoint, data) {
+    return this.request(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(data)
     });
+  },
 
-    if (response.status === 401) {
-      localStorage.removeItem('haven_access_token');
-      localStorage.removeItem('haven_refresh_token');
-      localStorage.removeItem('haven_user');
-      throw new Error('Authentication failed. Your session may have expired.');
-    }
+  async get(endpoint) {
+    return this.request(endpoint, {
+      method: 'GET'
+    });
+  },
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+  async put(endpoint, data) {
+    return this.request(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
 
-    return await response.json();
+  async patch(endpoint, data) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async delete(endpoint) {
+    return this.request(endpoint, {
+      method: 'DELETE'
+    });
   }
 };

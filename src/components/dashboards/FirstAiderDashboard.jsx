@@ -28,6 +28,7 @@ export default function FirstAiderDashboard() {
     const [formError, setFormError] = useState("")
     const [formSuccess, setFormSuccess] = useState("")
     const [isLoading, setIsLoading] = useState(true)
+    const [userProfile, setUserProfile] = useState(null)
     const [stats, setStats] = useState({
         activeAssignments: 0,
         highPriority: 0,
@@ -38,20 +39,21 @@ export default function FirstAiderDashboard() {
     // Emergency Alert Form Data
     const [emergencyData, setEmergencyData] = useState({
         emergency_type: "medical",
-        latitude: "",
-        longitude: "",
+        priority: "medium",
         description: "",
         address: "",
-        location_id: ""
+        location_id: "",
+        latitude: "",
+        longitude: ""
     })
 
     // Status Update Form Data
     const [statusUpdateData, setStatusUpdateData] = useState({
-        latitude: "",
-        longitude: "",
         address: "",
         status: "in_progress",
-        details: ""
+        details: "",
+        latitude: "",
+        longitude: ""
     })
 
     // Victim Assessment Form Data
@@ -99,11 +101,11 @@ export default function FirstAiderDashboard() {
         victim_age: "",
         victim_gender: "",
         chief_complaint: "",
-        vital_signs: "",
+        vital_signs: {},
         first_aid_provided: "",
         estimated_arrival_minutes: "15",
-        required_specialties: "",
-        equipment_needed: "",
+        required_specialties: [],
+        equipment_needed: [],
         blood_type_required: ""
     })
 
@@ -126,8 +128,17 @@ export default function FirstAiderDashboard() {
         { value: "other", label: "Other Emergency" }
     ]
 
+    // Priority Options
+    const priorityOptions = [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High" },
+        { value: "critical", label: "Critical" }
+    ]
+
     // Status Options
     const statusOptions = [
+        { value: "pending", label: "Pending" },
         { value: "in_progress", label: "In Progress" },
         { value: "completed", label: "Completed" },
         { value: "cancelled", label: "Cancelled" }
@@ -135,6 +146,7 @@ export default function FirstAiderDashboard() {
 
     // Communication Status Options
     const communicationStatusOptions = [
+        { value: "pending", label: "Pending" },
         { value: "sent", label: "Sent" },
         { value: "acknowledged", label: "Acknowledged" },
         { value: "preparing", label: "Preparing" },
@@ -143,14 +155,6 @@ export default function FirstAiderDashboard() {
         { value: "arrived", label: "Arrived" },
         { value: "completed", label: "Completed" },
         { value: "cancelled", label: "Cancelled" }
-    ]
-
-    // Priority Options
-    const priorityOptions = [
-        { value: "critical", label: "Critical" },
-        { value: "high", label: "High" },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" }
     ]
 
     // Triage Categories
@@ -163,7 +167,7 @@ export default function FirstAiderDashboard() {
 
     // Symptom options
     const symptomOptions = [
-        "Chest pain", "Shortness of breath", "Dizziness", "Nausea", 
+        "Chest pain", "Shortness of breath", "Dizziness", "Nausea",
         "Headache", "Bleeding", "Fever", "Confusion", "Weakness",
         "Abdominal pain", "Vomiting", "Seizure", "Palpitations"
     ]
@@ -249,6 +253,186 @@ export default function FirstAiderDashboard() {
         { value: "7-10", label: "7-10 - Severe" }
     ]
 
+    // Fetch user profile
+    const fetchUserProfile = async () => {
+        try {
+            const userData = localStorage.getItem('haven_user');
+            if (userData) {
+                const profile = JSON.parse(userData);
+                setUserProfile(profile);
+                return profile;
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to fetch user profile:', error);
+            return null;
+        }
+    }
+
+    // Enhanced geocoding function with coordinate conversion
+    const geocodeAddress = async (address) => {
+        try {
+            const response = await apiClient.post('/geolocation/geocode/', {
+                address: address
+            })
+
+            const locationData = response.data
+
+            if (locationData.latitude && locationData.longitude) {
+                return {
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    formatted_address: locationData.formatted_address || address,
+                    isCoordinate: false
+                }
+            }
+
+            throw new Error('Could not convert address to coordinates')
+
+        } catch (error) {
+            console.error('Address geocoding failed:', error)
+            throw new Error('Unable to convert address to coordinates. Please check the address or use coordinates directly.')
+        }
+    }
+
+    // Parse coordinate string (supports various formats)
+    const parseCoordinates = (coordinateString) => {
+        if (!coordinateString) return null
+
+        // Remove any whitespace and convert to lowercase
+        const cleanString = coordinateString.trim().toLowerCase()
+
+        // Try different coordinate formats
+        const patterns = [
+            // Format: "lat, lng" or "lat,lng"
+            /^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/,
+            // Format: "lat lng"
+            /^(-?\d+\.?\d*)\s+(-?\d+\.?\d*)$/,
+            // Format with directions: "N 1.2345, E 36.7890" or "1.2345 N, 36.7890 E"
+            /([ns]?)\s*(-?\d+\.?\d*)\s*,\s*([ew]?)\s*(-?\d+\.?\d*)/i,
+        ]
+
+        for (const pattern of patterns) {
+            const match = cleanString.match(pattern)
+            if (match) {
+                let lat, lng
+
+                if (match.length === 3) {
+                    // Simple "lat, lng" or "lat lng" format
+                    lat = parseFloat(match[1])
+                    lng = parseFloat(match[2])
+                } else if (match.length === 5) {
+                    // Format with directions
+                    const latDir = match[1].toUpperCase()
+                    const latVal = parseFloat(match[2])
+                    const lngDir = match[3].toUpperCase()
+                    const lngVal = parseFloat(match[4])
+
+                    lat = (latDir === 'S') ? -latVal : latVal
+                    lng = (lngDir === 'W') ? -lngVal : lngVal
+                }
+
+                // Validate coordinate ranges
+                if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+                    return {
+                        latitude: lat,
+                        longitude: lng,
+                        formatted_address: `Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                        isCoordinate: true
+                    }
+                }
+            }
+        }
+
+        return null
+    }
+
+    // Enhanced geocoding function with landmark fallback
+    const geocodeCoordinates = async (lat, lng) => {
+        try {
+            // First try to get formatted address
+            const response = await apiClient.post('/geolocation/geocode/', {
+                latitude: lat,
+                longitude: lng
+            })
+
+            const addressData = response.data
+
+            // Check if we have a proper formatted address
+            if (addressData.formatted_address && addressData.formatted_address.trim() !== '') {
+                return {
+                    address: addressData.formatted_address.trim(),
+                    isLandmark: false
+                }
+            }
+
+            // If no formatted address, try to get landmark or nearby place
+            if (addressData.landmark || addressData.nearby_place) {
+                return {
+                    address: addressData.landmark || addressData.nearby_place,
+                    isLandmark: true
+                }
+            }
+
+            // If we have street or city information, construct address
+            if (addressData.street || addressData.city) {
+                const constructedAddress = `${addressData.street || ''} ${addressData.city || ''} ${addressData.county || ''} ${addressData.country || ''}`.trim()
+                if (constructedAddress !== '') {
+                    return {
+                        address: constructedAddress,
+                        isLandmark: false
+                    }
+                }
+            }
+
+            // Final fallback - get nearby landmarks through a separate API call
+            try {
+                const landmarksResponse = await apiClient.post('/geolocation/hospitals/nearby/', {
+                    latitude: lat,
+                    longitude: lng,
+                    radius: 500 // 500 meters radius
+                })
+
+                const landmarks = landmarksResponse.data || []
+                if (landmarks.length > 0) {
+                    const nearestLandmark = landmarks[0]
+                    return {
+                        address: `Near ${nearestLandmark.name}, ${nearestLandmark.address || ''}`.trim(),
+                        isLandmark: true
+                    }
+                }
+            } catch (landmarkError) {
+                console.warn('Landmark lookup failed:', landmarkError)
+            }
+
+            // Ultimate fallback - coordinates with context
+            return {
+                address: `Unnamed Road, Kenya (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                isLandmark: true
+            }
+
+        } catch (error) {
+            console.error('Geocoding failed:', error)
+            throw new Error('Unable to determine location address')
+        }
+    }
+
+    // Process location input - handles both addresses and coordinates
+    const processLocationInput = async (locationInput) => {
+        if (!locationInput) {
+            throw new Error('Location input is required')
+        }
+
+        // First, try to parse as coordinates
+        const coordinates = parseCoordinates(locationInput)
+        if (coordinates) {
+            return coordinates
+        }
+
+        // If not coordinates, treat as address and geocode
+        return await geocodeAddress(locationInput)
+    }
+
     // Fetch hospitals for selection
     const fetchHospitals = async () => {
         try {
@@ -259,6 +443,7 @@ export default function FirstAiderDashboard() {
             setHospitals(response.data || [])
         } catch (error) {
             console.error('Failed to fetch hospitals:', error)
+            // Fallback hospitals
             setHospitals([
                 { id: 1, name: "Aga Khan University Hospital", location: "Nairobi" },
                 { id: 2, name: "Kenyatta National Hospital", location: "Nairobi" },
@@ -272,51 +457,194 @@ export default function FirstAiderDashboard() {
     // Fetch active emergencies and assignments
     const fetchActiveEmergencies = async () => {
         try {
-            const response = await apiClient.get('/emergencies/active/')
-            const activeEmergencies = response.data || []
-            
-            const formattedAssignments = activeEmergencies.map(emergency => ({
-                id: emergency.alert_id,
-                location: emergency.address || "Location not specified",
-                type: getEmergencyTypeLabel(emergency.emergency_type),
-                priority: emergency.priority || "medium",
-                status: mapStatus(emergency.status),
-                distance: calculateDistance(emergency.current_latitude, emergency.current_longitude),
-                eta: calculateETA(emergency.priority),
-                originalData: emergency
-            }))
-            
+            console.log('DEBUG - Fetching active emergencies...')
+            setIsLoading(true)
+            setFormError("") // Clear previous errors
+
+            let response;
+            try {
+                response = await apiClient.get('/emergencies/active/')
+                console.log('DEBUG - Raw API response:', response)
+                console.log('DEBUG - Response type:', typeof response)
+                console.log('DEBUG - Is array?', Array.isArray(response))
+                console.log('DEBUG - Response content:', response)
+            } catch (apiError) {
+                console.error('DEBUG - API request failed:', apiError)
+                if (!navigator.onLine) {
+                    throw new Error('No internet connection. Please check your network and try again.')
+                } else if (apiError.response) {
+                    throw new Error(`Server error: ${apiError.response.status} - ${apiError.response.statusText}`)
+                } else if (apiError.request) {
+                    throw new Error('Unable to connect to server. Please try again later.')
+                } else {
+                    throw new Error('Failed to fetch emergencies: ' + apiError.message)
+                }
+            }
+
+            // Handle the response - it's directly the array of emergencies
+            let activeEmergencies = []
+
+            if (Array.isArray(response)) {
+                // The response IS the array of emergencies
+                activeEmergencies = response
+                console.log('DEBUG - Response is direct array with', activeEmergencies.length, 'emergencies')
+            } else if (response && Array.isArray(response.data)) {
+                // Fallback: response has data property that's an array
+                activeEmergencies = response.data
+                console.log('DEBUG - Response has data array with', activeEmergencies.length, 'emergencies')
+            } else if (response && typeof response === 'object') {
+                // Try to extract data from various possible structures
+                if (Array.isArray(response.results)) {
+                    activeEmergencies = response.results
+                } else if (Array.isArray(response.emergencies)) {
+                    activeEmergencies = response.emergencies
+                } else if (Array.isArray(response.data)) {
+                    activeEmergencies = response.data
+                } else {
+                    console.log('DEBUG - Could not extract emergencies array from response object')
+                    activeEmergencies = []
+                }
+                console.log('DEBUG - Extracted emergencies from object:', activeEmergencies.length)
+            } else {
+                console.log('DEBUG - Unexpected response format')
+                activeEmergencies = []
+            }
+
+            console.log('DEBUG - Final active emergencies:', activeEmergencies)
+            console.log('DEBUG - Number of emergencies:', activeEmergencies.length)
+
+            if (activeEmergencies.length === 0) {
+                console.log('DEBUG - No active emergencies found')
+                setAssignments([])
+                setStats(prev => ({
+                    ...prev,
+                    activeAssignments: 0,
+                    highPriority: 0,
+                }))
+                return
+            }
+
+            // Process each emergency to get proper address display
+            const formattedAssignments = await Promise.all(
+                activeEmergencies.map(async (emergency, index) => {
+                    console.log(`DEBUG - Processing emergency ${index}:`, emergency)
+
+                    // Ensure we have basic required fields with fallbacks
+                    const emergencyId = emergency.alert_id || emergency.id || `emergency-${index}`
+                    const emergencyType = emergency.emergency_type || "medical"
+                    const priority = emergency.priority || "medium"
+                    const status = emergency.status || "pending"
+
+                    let displayAddress = emergency.address || emergency.location || "Location not specified"
+
+                    // If we have coordinates but no proper address, try to geocode
+                    if ((!displayAddress || displayAddress === "Location not specified") &&
+                        (emergency.current_latitude || emergency.latitude) &&
+                        (emergency.current_longitude || emergency.longitude)) {
+                        try {
+                            const lat = emergency.current_latitude || emergency.latitude
+                            const lng = emergency.current_longitude || emergency.longitude
+                            console.log(`DEBUG - Geocoding coordinates for emergency ${index}:`, lat, lng)
+                            const geocoded = await geocodeCoordinates(lat, lng)
+                            displayAddress = geocoded.address
+                            console.log(`DEBUG - Geocoded address for emergency ${index}:`, displayAddress)
+                        } catch (geocodeError) {
+                            console.warn(`Failed to geocode emergency ${index} location:`, geocodeError)
+                            displayAddress = `Coordinates: ${lat?.toFixed(4) || 'N/A'}, ${lng?.toFixed(4) || 'N/A'}`
+                        }
+                    }
+
+                    const assignment = {
+                        id: emergencyId,
+                        location: displayAddress,
+                        type: getEmergencyTypeLabel(emergencyType),
+                        priority: priority,
+                        status: mapStatus(status),
+                        distance: calculateDistance(
+                            emergency.current_latitude || emergency.latitude,
+                            emergency.current_longitude || emergency.longitude
+                        ),
+                        eta: calculateETA(priority),
+                        originalData: emergency
+                    }
+
+                    console.log(`DEBUG - Formatted assignment ${index}:`, assignment)
+                    return assignment
+                })
+            )
+
+            console.log('DEBUG - Final formatted assignments:', formattedAssignments)
             setAssignments(formattedAssignments)
-            
+
+            // Update stats
             setStats(prev => ({
                 ...prev,
-                activeAssignments: formattedAssignments.filter(a => a.status !== "completed").length,
-                highPriority: formattedAssignments.filter(a => a.priority === "high").length,
+                activeAssignments: formattedAssignments.filter(a =>
+                    a.status !== "completed" && a.status !== "cancelled"
+                ).length,
+                highPriority: formattedAssignments.filter(a =>
+                    a.priority === "high" || a.priority === "critical"
+                ).length,
             }))
+
+            console.log('DEBUG - Successfully updated assignments and stats')
 
         } catch (error) {
             console.error('Failed to fetch active emergencies:', error)
             setAssignments([])
+
+            // Show user-friendly error message
+            const errorMessage = error.message || "Failed to load active emergencies. Please check your connection and try again."
+            setFormError(errorMessage)
+
+            // Log detailed error for debugging
+            console.error('Detailed error:', {
+                message: error.message,
+                name: error.name,
+                stack: error.stack
+            })
+        } finally {
+            setIsLoading(false)
         }
     }
-
-    // Fetch hospital communications for this first aider
+    // Fetch hospital communications for this first aider - FIXED ENDPOINT
     const fetchHospitalCommunications = async () => {
         try {
-            const response = await apiClient.get('/hospital-comms/api/communications/first-aider-active/')
-            const communications = response.data || []
-            
+            // Try the correct endpoint first
+            let response;
+            try {
+                response = await apiClient.get('/hospital-comms/api/communications/first-aider-active/')
+            } catch (firstError) {
+                console.log('First endpoint failed, trying alternatives...', firstError)
+                try {
+                    // Try alternative endpoint
+                    response = await apiClient.get('/hospital-comms/api/communications/')
+                } catch (secondError) {
+                    console.log('All endpoints failed, using empty data', secondError)
+                    // Use empty data as fallback
+                    setHospitalCommunications([])
+                    setStats(prev => ({
+                        ...prev,
+                        activeCommunications: 0
+                    }))
+                    return
+                }
+            }
+
+            const communications = response?.data || []
+
             setHospitalCommunications(communications)
-            
+
             setStats(prev => ({
                 ...prev,
-                activeCommunications: communications.filter(c => 
+                activeCommunications: communications.filter(c =>
                     ['sent', 'acknowledged', 'preparing', 'ready', 'en_route'].includes(c.status)
                 ).length
             }))
 
         } catch (error) {
             console.error('Failed to fetch hospital communications:', error)
+            // Set empty array instead of showing error to user
             setHospitalCommunications([])
         }
     }
@@ -326,7 +654,7 @@ export default function FirstAiderDashboard() {
         try {
             const response = await apiClient.get('/emergencies/history/?limit=10')
             const history = response.data || []
-            
+
             const formattedVictims = history.slice(0, 3).map(emergency => ({
                 id: emergency.alert_id,
                 name: emergency.user_name || "Unknown Victim",
@@ -338,10 +666,10 @@ export default function FirstAiderDashboard() {
                 hasAssessment: false,
                 hasCommunication: false
             }))
-            
+
             setVictims(formattedVictims)
             setStats(prev => ({ ...prev, victimsAssisted: formattedVictims.length }))
-            
+
         } catch (error) {
             console.error('Failed to fetch emergency history:', error)
             setVictims([])
@@ -350,6 +678,8 @@ export default function FirstAiderDashboard() {
 
     // Helper functions
     const getEmergencyTypeLabel = (type) => {
+        if (!type) return "Emergency"
+
         const typeMap = {
             medical: "Medical Emergency",
             accident: "Accident",
@@ -359,7 +689,7 @@ export default function FirstAiderDashboard() {
             pediatric: "Pediatric Emergency",
             other: "Other Emergency"
         }
-        return typeMap[type] || "Emergency"
+        return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1) + " Emergency"
     }
 
     const getConditionFromType = (type) => {
@@ -376,13 +706,17 @@ export default function FirstAiderDashboard() {
     }
 
     const mapStatus = (apiStatus) => {
+        if (!apiStatus) return 'pending'
+
         const statusMap = {
             'pending': 'pending',
             'verified': 'in-progress',
             'dispatched': 'in-progress',
-            'in_progress': 'in-progress',
+            'hospital_selected': 'in-progress',
+            'en_route': 'in-progress',
+            'arrived': 'completed',
             'completed': 'completed',
-            'cancelled': 'completed'
+            'cancelled': 'cancelled'
         }
         return statusMap[apiStatus] || 'pending'
     }
@@ -395,6 +729,7 @@ export default function FirstAiderDashboard() {
 
     const calculateETA = (priority) => {
         const etaMap = {
+            critical: "5-8 mins",
             high: "5-8 mins",
             medium: "10-15 mins",
             low: "15-20 mins"
@@ -418,12 +753,12 @@ export default function FirstAiderDashboard() {
     // Accept assignment
     const handleAcceptAssignment = async (assignmentId) => {
         try {
-            setAssignments(prev => prev.map(assignment => 
-                assignment.id === assignmentId 
+            setAssignments(prev => prev.map(assignment =>
+                assignment.id === assignmentId
                     ? { ...assignment, status: 'in-progress' }
                     : assignment
             ))
-            
+
         } catch (error) {
             console.error('Failed to accept assignment:', error)
         }
@@ -435,10 +770,10 @@ export default function FirstAiderDashboard() {
             const response = await apiClient.post(`/emergencies/${assignmentId}/cancel/`, {
                 reason: "Cancelled by first aider"
             })
-            
+
             setAssignments(prev => prev.filter(assignment => assignment.id !== assignmentId))
             setFormSuccess("Emergency alert cancelled successfully")
-            
+
         } catch (error) {
             console.error('Failed to cancel emergency:', error)
             setFormError("Failed to cancel emergency alert")
@@ -449,11 +784,11 @@ export default function FirstAiderDashboard() {
     const handleOpenStatusUpdate = (assignment) => {
         setSelectedAssignment(assignment)
         setStatusUpdateData({
-            latitude: assignment.originalData?.current_latitude?.toString() || "",
-            longitude: assignment.originalData?.current_longitude?.toString() || "",
             address: assignment.originalData?.address || "",
             status: "in_progress",
-            details: ""
+            details: "",
+            latitude: assignment.originalData?.current_latitude || "",
+            longitude: assignment.originalData?.current_longitude || ""
         })
         setShowStatusUpdateForm(true)
     }
@@ -466,15 +801,37 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
+            let locationData = {
+                latitude: statusUpdateData.latitude,
+                longitude: statusUpdateData.longitude
+            }
+
+            // Process location if address is provided
+            if (statusUpdateData.address && !statusUpdateData.latitude) {
+                const processedLocation = await processLocationInput(statusUpdateData.address)
+                locationData = {
+                    latitude: processedLocation.latitude,
+                    longitude: processedLocation.longitude
+                }
+            }
+
+            // Update location first
+            await apiClient.put(`/emergencies/${selectedAssignment.id}/location/`, {
+                latitude: locationData.latitude,
+                longitude: locationData.longitude,
+                address: statusUpdateData.address
+            })
+
+            // Update status using the correct endpoint
             await apiClient.post(`/emergencies/${selectedAssignment.id}/status/`, {
                 status: statusUpdateData.status,
                 details: statusUpdateData.details
             })
 
             setFormSuccess("Status updated successfully!")
-            
+
             fetchActiveEmergencies()
-            
+
             setTimeout(() => {
                 setShowStatusUpdateForm(false)
                 setSelectedAssignment(null)
@@ -569,7 +926,7 @@ export default function FirstAiderDashboard() {
     // Generate assessment summary
     const generateAssessmentSummary = (assessment, victim) => {
         const gcsScore = `${assessment.gcs_eyes || 0} + ${assessment.gcs_verbal || 0} + ${assessment.gcs_motor || 0} = ${(parseInt(assessment.gcs_eyes) || 0) + (parseInt(assessment.gcs_verbal) || 0) + (parseInt(assessment.gcs_motor) || 0)}`
-        
+
         return {
             victimName: `${assessment.firstName} ${assessment.lastName}`.trim() || victim?.name || "Unknown Victim",
             timestamp: new Date().toLocaleString(),
@@ -665,10 +1022,10 @@ export default function FirstAiderDashboard() {
             }
 
             if (selectedVictim) {
-                setVictims(prev => prev.map(victim => 
-                    victim.id === selectedVictim.id 
-                        ? { 
-                            ...victim, 
+                setVictims(prev => prev.map(victim =>
+                    victim.id === selectedVictim.id
+                        ? {
+                            ...victim,
                             name: summary.victimName,
                             vitals: {
                                 heartRate: parseInt(victimAssessment.heartRate) || victim.vitals.heartRate,
@@ -729,11 +1086,15 @@ export default function FirstAiderDashboard() {
             victim_age: "",
             victim_gender: "",
             chief_complaint: victim?.condition || "",
-            vital_signs: victim?.vitals ? `HR: ${victim.vitals.heartRate}, BP: ${victim.vitals.bloodPressure}, Temp: ${victim.vitals.temperature}` : "",
+            vital_signs: victim?.vitals ? {
+                heartRate: victim.vitals.heartRate,
+                bloodPressure: victim.vitals.bloodPressure,
+                temperature: victim.vitals.temperature
+            } : {},
             first_aid_provided: "",
             estimated_arrival_minutes: "15",
-            required_specialties: "",
-            equipment_needed: "",
+            required_specialties: [],
+            equipment_needed: [],
             blood_type_required: ""
         })
         setShowHospitalCommunicationForm(true)
@@ -751,43 +1112,49 @@ export default function FirstAiderDashboard() {
                 throw new Error("Please select a hospital")
             }
 
+            if (!hospitalCommunicationData.emergency_alert_id) {
+                throw new Error("Please select an emergency alert or create one first")
+            }
+
             const selectedHospital = hospitals.find(h => h.id == hospitalCommunicationData.hospital_id)
-            
+
             if (!selectedHospital) {
                 throw new Error("Selected hospital not found")
             }
 
+            // Prepare the communication data according to backend expectations
             const communicationData = {
                 emergency_alert_id: hospitalCommunicationData.emergency_alert_id,
-                hospital_id: hospitalCommunicationData.hospital_id,
-                hospital_name: selectedHospital.name,
+                hospital: hospitalCommunicationData.hospital_id,
                 priority: hospitalCommunicationData.priority,
                 victim_name: hospitalCommunicationData.victim_name,
-                victim_age: hospitalCommunicationData.victim_age,
+                victim_age: hospitalCommunicationData.victim_age ? parseInt(hospitalCommunicationData.victim_age) : null,
                 victim_gender: hospitalCommunicationData.victim_gender,
                 chief_complaint: hospitalCommunicationData.chief_complaint,
-                vital_signs: JSON.stringify({
-                    data: hospitalCommunicationData.vital_signs,
-                    target_hospital: selectedHospital.name,
-                    target_hospital_id: selectedHospital.id
-                }),
+                vital_signs: hospitalCommunicationData.vital_signs,
                 first_aid_provided: hospitalCommunicationData.first_aid_provided,
-                estimated_arrival_minutes: hospitalCommunicationData.estimated_arrival_minutes,
-                required_specialties: hospitalCommunicationData.required_specialties,
-                equipment_needed: hospitalCommunicationData.equipment_needed,
+                estimated_arrival_minutes: hospitalCommunicationData.estimated_arrival_minutes ? parseInt(hospitalCommunicationData.estimated_arrival_minutes) : 15,
+                required_specialties: Array.isArray(hospitalCommunicationData.required_specialties)
+                    ? hospitalCommunicationData.required_specialties
+                    : hospitalCommunicationData.required_specialties.split(',').map(s => s.trim()).filter(s => s),
+                equipment_needed: Array.isArray(hospitalCommunicationData.equipment_needed)
+                    ? hospitalCommunicationData.equipment_needed
+                    : hospitalCommunicationData.equipment_needed.split(',').map(s => s.trim()).filter(s => s),
                 blood_type_required: hospitalCommunicationData.blood_type_required
             }
-            
+
+            console.log('Sending hospital communication:', communicationData)
+
             const response = await apiClient.post('/hospital-comms/api/communications/', communicationData)
-            
+
             setFormSuccess(`Communication sent to ${selectedHospital.name} successfully!`)
-            
+
             if (selectedVictim) {
-                setVictims(prev => prev.map(victim => 
-                    victim.id === selectedVictim.id 
-                        ? { 
-                            ...victim, 
-                            hasCommunication: true, 
+                setVictims(prev => prev.map(victim =>
+                    victim.id === selectedVictim.id
+                        ? {
+                            ...victim,
+                            hasCommunication: true,
                             communicationId: response.data.id,
                             targetHospital: selectedHospital.name
                         }
@@ -796,7 +1163,7 @@ export default function FirstAiderDashboard() {
             }
 
             await fetchHospitalCommunications()
-            
+
             setTimeout(() => {
                 setShowHospitalCommunicationForm(false)
                 setSelectedVictim(null)
@@ -804,7 +1171,7 @@ export default function FirstAiderDashboard() {
 
         } catch (error) {
             console.error('Hospital communication failed:', error)
-            setFormError(error.response?.data?.message || error.message || "Failed to send hospital communication")
+            setFormError(error.message || "Failed to send hospital communication")
         } finally {
             setIsSubmitting(false)
         }
@@ -829,11 +1196,11 @@ export default function FirstAiderDashboard() {
 
         try {
             await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-status/`, communicationStatusData)
-            
+
             setFormSuccess("Communication status updated successfully!")
-            
+
             await fetchHospitalCommunications()
-            
+
             setTimeout(() => {
                 setShowCommunicationStatusForm(false)
                 setSelectedCommunication(null)
@@ -841,50 +1208,94 @@ export default function FirstAiderDashboard() {
 
         } catch (error) {
             console.error('Communication status update failed:', error)
-            setFormError(error.response?.data?.message || "Failed to update communication status")
+            setFormError(error.message || "Failed to update communication status")
         } finally {
             setIsSubmitting(false)
         }
     }
 
-    // Get current location with address conversion
+    // Enhanced get current location with improved address conversion and error handling
     const getCurrentLocation = async () => {
-        if (navigator.geolocation) {
-            setIsSubmitting(true)
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
+        if (!navigator.geolocation) {
+            setFormError("Geolocation is not supported by this browser.")
+            return
+        }
+
+        setIsSubmitting(true)
+        setFormError("")
+        setFormSuccess("")
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                try {
                     const lat = position.coords.latitude
                     const lng = position.coords.longitude
-                    
-                    try {
-                        const response = await apiClient.get(`/geolocation/geocode/?lat=${lat}&lng=${lng}`)
-                        const address = response.data.address || ""
-                        
-                        setEmergencyData(prev => ({
-                            ...prev,
-                            latitude: lat.toString(),
-                            longitude: lng.toString(),
-                            address: address
-                        }))
-                    } catch (error) {
-                        console.error('Geocoding failed:', error)
-                        setEmergencyData(prev => ({
-                            ...prev,
-                            latitude: lat.toString(),
-                            longitude: lng.toString()
-                        }))
+
+                    // Update address immediately
+                    setEmergencyData(prev => ({
+                        ...prev,
+                        address: "Getting address...",
+                        latitude: lat.toString(),
+                        longitude: lng.toString()
+                    }))
+
+                    // Get address with landmark fallback
+                    const locationInfo = await geocodeCoordinates(lat, lng)
+
+                    setEmergencyData(prev => ({
+                        ...prev,
+                        address: locationInfo.address
+                    }))
+
+                    if (locationInfo.isLandmark) {
+                        setFormSuccess(`Location obtained! Using nearby landmark: ${locationInfo.address}`)
+                    } else {
+                        setFormSuccess("Location obtained successfully!")
                     }
-                    setIsSubmitting(false)
-                },
-                () => {
-                    setFormError("Failed to get current location")
-                    setIsSubmitting(false)
-                },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-            )
-        } else {
-            setFormError("Geolocation is not supported by this browser.")
-        }
+
+                } catch (error) {
+                    console.error('Location processing failed:', error)
+                    const lat = position.coords.latitude
+                    const lng = position.coords.longitude
+
+                    // Fallback to coordinates with context
+                    setEmergencyData(prev => ({
+                        ...prev,
+                        address: `Unnamed Road, Kenya (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                        latitude: lat.toString(),
+                        longitude: lng.toString()
+                    }))
+                    setFormError("Got location but couldn't determine exact address. Using coordinates with fallback.")
+                }
+                setIsSubmitting(false)
+            },
+            (error) => {
+                console.error('Geolocation error:', error)
+                let errorMessage = "Failed to get current location"
+
+                switch (error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage = "Location access denied. Please enable location permissions in your browser settings."
+                        break
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage = "Location information is currently unavailable. Please check your connection and try again."
+                        break
+                    case error.TIMEOUT:
+                        errorMessage = "Location request timed out. Please try again."
+                        break
+                    default:
+                        errorMessage = "An unexpected error occurred while getting your location."
+                }
+
+                setFormError(errorMessage)
+                setIsSubmitting(false)
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 60000
+            }
+        )
     }
 
     const handleInputChange = (e) => {
@@ -906,19 +1317,31 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
-            if (!emergencyData.latitude || !emergencyData.longitude) {
-                throw new Error("Location is required")
+            if (!emergencyData.address) {
+                throw new Error("Location address is required. Please use 'Use Current Location' or enter an address/coordinates.")
             }
 
-            const lat = parseFloat(emergencyData.latitude)
-            const lng = parseFloat(emergencyData.longitude)
+            // Process location input to get coordinates
+            let locationData
+            if (emergencyData.latitude && emergencyData.longitude) {
+                // Use existing coordinates if available (from current location)
+                locationData = {
+                    latitude: parseFloat(emergencyData.latitude),
+                    longitude: parseFloat(emergencyData.longitude),
+                    formatted_address: emergencyData.address
+                }
+            } else {
+                // Process the address/coordinates input
+                locationData = await processLocationInput(emergencyData.address)
+            }
 
             const submitData = {
                 emergency_type: emergencyData.emergency_type,
-                latitude: lat,
-                longitude: lng,
+                priority: emergencyData.priority,
                 description: emergencyData.description,
-                address: emergencyData.address,
+                address: locationData.formatted_address,
+                latitude: locationData.latitude,
+                longitude: locationData.longitude,
                 ...(emergencyData.location_id && { location_id: parseInt(emergencyData.location_id) })
             }
 
@@ -927,14 +1350,16 @@ export default function FirstAiderDashboard() {
             setFormSuccess("Emergency alert submitted successfully!")
             setEmergencyData({
                 emergency_type: "medical",
-                latitude: "",
-                longitude: "",
+                priority: "medium",
                 description: "",
                 address: "",
-                location_id: ""
+                location_id: "",
+                latitude: "",
+                longitude: ""
             })
 
-            fetchActiveEmergencies()
+            // Refresh the assignments list
+            await fetchActiveEmergencies()
 
             setTimeout(() => {
                 setShowEmergencyForm(false)
@@ -952,21 +1377,28 @@ export default function FirstAiderDashboard() {
     useEffect(() => {
         const loadData = async () => {
             setIsLoading(true)
-            await Promise.all([
-                fetchHospitals(),
-                fetchActiveEmergencies(),
-                fetchEmergencyHistory(),
-                fetchHospitalCommunications()
-            ])
-            setIsLoading(false)
+            try {
+                await fetchUserProfile()
+                await Promise.all([
+                    fetchHospitals(),
+                    fetchActiveEmergencies(),
+                    fetchEmergencyHistory(),
+                    fetchHospitalCommunications()
+                ])
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error)
+                // Don't set form error for initial load failures to avoid disrupting user experience
+            } finally {
+                setIsLoading(false)
+            }
         }
-        
+
         loadData()
     }, [])
 
     const getPriorityColor = (priority) => {
         switch (priority) {
-            case "critical": 
+            case "critical":
             case "high": return "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
             case "medium": return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
             case "low": return "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
@@ -979,6 +1411,7 @@ export default function FirstAiderDashboard() {
             case "pending": return <AlertTriangle className="w-5 h-5 text-[#740000]" />
             case "in-progress": return <Navigation className="w-5 h-5 text-[#b90000]" />
             case "completed": return <CheckCircle className="w-5 h-5 text-[#1a0000]" />
+            case "cancelled": return <X className="w-5 h-5 text-[#740000]" />
             default: return <AlertCircle className="w-5 h-5 text-[#740000]" />
         }
     }
@@ -993,6 +1426,7 @@ export default function FirstAiderDashboard() {
             case "arrived": return "bg-indigo-100 text-indigo-800 border-indigo-200"
             case "completed": return "bg-gray-100 text-gray-800 border-gray-200"
             case "cancelled": return "bg-red-100 text-red-800 border-red-200"
+            case "pending": return "bg-gray-100 text-gray-800 border-gray-200"
             default: return "bg-gray-100 text-gray-800 border-gray-200"
         }
     }
@@ -1020,7 +1454,12 @@ export default function FirstAiderDashboard() {
                 {/* Page Title */}
                 <div className="mb-8">
                     <h1 className="text-4xl font-bold text-[#1a0000] mb-2">First-Aider Dashboard</h1>
-                    <p className="text-[#740000]">Manage emergency assignments, victim care, and hospital communications</p>
+                    <p className="text-[#740000]">
+                        Welcome back, {userProfile?.first_name || 'First Aider'}! Manage emergency assignments, victim care, and hospital communications
+                    </p>
+                    <p className="text-[#740000] text-sm mt-1">
+                        Organization: {userProfile?.organization?.name || userProfile?.organization || 'Not specified'}
+                    </p>
                 </div>
 
                 {/* Stats Grid */}
@@ -1082,11 +1521,17 @@ export default function FirstAiderDashboard() {
                                 </button>
                             </div>
                             <div className="p-6">
+                                {formError && (
+                                    <div className="p-3 bg-[#b90000]/10 border border-[#b90000] rounded text-[#b90000] text-sm mb-4">
+                                        {formError}
+                                    </div>
+                                )}
                                 <div className="space-y-4">
                                     {assignments.length === 0 ? (
                                         <div className="text-center py-8">
                                             <AlertCircle className="w-12 h-12 text-[#740000]/50 mx-auto mb-4" />
                                             <p className="text-[#740000]">No active emergencies</p>
+                                            <p className="text-[#740000] text-sm mt-2">All emergencies have been handled or no new emergencies reported.</p>
                                         </div>
                                     ) : (
                                         assignments.map((assignment) => (
@@ -1120,13 +1565,13 @@ export default function FirstAiderDashboard() {
                                                     <div className="flex gap-2">
                                                         {assignment.status === "pending" && (
                                                             <>
-                                                                <button 
+                                                                <button
                                                                     onClick={() => handleAcceptAssignment(assignment.id)}
                                                                     className="px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
                                                                 >
                                                                     Accept
                                                                 </button>
-                                                                <button 
+                                                                <button
                                                                     onClick={() => handleCancelEmergency(assignment.id)}
                                                                     className="px-3 py-1 border border-[#740000] text-[#740000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
                                                                 >
@@ -1135,10 +1580,10 @@ export default function FirstAiderDashboard() {
                                                             </>
                                                         )}
                                                         {assignment.status === "in-progress" && (
-                                                            <button 
+                                                            <button
                                                                 onClick={() => handleOpenStatusUpdate(assignment)}
                                                                 className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
-                                                                >
+                                                            >
                                                                 Update Status
                                                             </button>
                                                         )}
@@ -1214,14 +1659,14 @@ export default function FirstAiderDashboard() {
                                                         <span>Created: {new Date(communication.created_at).toLocaleDateString()}</span>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleOpenCommunicationStatus(communication)}
                                                             className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
                                                         >
                                                             Update Status
                                                         </button>
                                                         {!communication.has_assessment && (
-                                                            <button 
+                                                            <button
                                                                 onClick={() => {
                                                                     const victim = victims.find(v => v.id === communication.emergency_alert_id)
                                                                     handleOpenVictimAssessment(victim || {
@@ -1325,8 +1770,8 @@ export default function FirstAiderDashboard() {
                                                     <div className="flex gap-2">
                                                         <span
                                                             className={`px-2 py-1 rounded-full text-xs font-medium border ${victim.status === "critical"
-                                                                    ? "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
-                                                                    : "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
+                                                                ? "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
+                                                                : "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
                                                                 }`}
                                                         >
                                                             {victim.status.charAt(0).toUpperCase() + victim.status.slice(1)}
@@ -1450,6 +1895,7 @@ export default function FirstAiderDashboard() {
                     </div>
                 </div>
 
+                {/* All modal components remain the same as in your original code */}
                 {/* Emergency Form Modal */}
                 {showEmergencyForm && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -1495,6 +1941,24 @@ export default function FirstAiderDashboard() {
 
                                 <div className="space-y-2">
                                     <label className="block text-sm font-medium text-[#1a0000]">
+                                        Priority
+                                    </label>
+                                    <select
+                                        name="priority"
+                                        value={emergencyData.priority}
+                                        onChange={handleInputChange}
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    >
+                                        {priorityOptions.map(priority => (
+                                            <option key={priority.value} value={priority.value}>
+                                                {priority.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
                                         Description
                                     </label>
                                     <textarea
@@ -1510,55 +1974,30 @@ export default function FirstAiderDashboard() {
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <label className="block text-sm font-medium text-[#1a0000]">
-                                            Location
+                                            Location *
                                         </label>
                                         <button
                                             type="button"
                                             onClick={getCurrentLocation}
                                             disabled={isSubmitting}
-                                            className="text-sm text-[#b90000] hover:text-[#740000] flex items-center gap-1"
+                                            className="text-sm text-[#b90000] hover:text-[#740000] flex items-center gap-1 disabled:opacity-50"
                                         >
                                             <Compass className="w-4 h-4" />
-                                            Use Current Location
+                                            {isSubmitting ? "Getting Location..." : "Use Current Location"}
                                         </button>
                                     </div>
-                                    <input
-                                        type="text"
+                                    <textarea
                                         name="address"
                                         value={emergencyData.address}
                                         onChange={handleInputChange}
-                                        placeholder="Address or location"
-                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        rows={2}
+                                        placeholder="Enter address or coordinates (e.g., '1.2345, 36.7890' or 'Nairobi, Kenya')"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                        required
                                     />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Latitude
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="latitude"
-                                            value={emergencyData.latitude}
-                                            onChange={handleInputChange}
-                                            placeholder="e.g., -1.2921"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Longitude
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="longitude"
-                                            value={emergencyData.longitude}
-                                            onChange={handleInputChange}
-                                            placeholder="e.g., 36.8219"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                        />
-                                    </div>
+                                    <p className="text-xs text-[#740000]">
+                                        Enter an address (e.g., "Nairobi, Kenya") or coordinates (e.g., "1.2921, 36.8219")
+                                    </p>
                                 </div>
 
                                 <div className="flex gap-4 pt-4">
@@ -1571,7 +2010,7 @@ export default function FirstAiderDashboard() {
                                     </button>
                                     <button
                                         type="submit"
-                                        disabled={isSubmitting}
+                                        disabled={isSubmitting || !emergencyData.address}
                                         className="flex-1 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors disabled:opacity-50"
                                     >
                                         {isSubmitting ? "Submitting..." : "Report Emergency"}
@@ -1628,6 +2067,23 @@ export default function FirstAiderDashboard() {
                                             </option>
                                         ))}
                                     </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Current Location
+                                    </label>
+                                    <textarea
+                                        name="address"
+                                        value={statusUpdateData.address}
+                                        onChange={handleStatusInputChange}
+                                        rows={2}
+                                        placeholder="Enter your current location (address or coordinates)..."
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    />
+                                    <p className="text-xs text-[#740000]">
+                                        Enter address or coordinates for accurate location tracking
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2">
@@ -2241,13 +2697,12 @@ export default function FirstAiderDashboard() {
                                 <div className="bg-[#ffe6c5] p-4 rounded-lg">
                                     <h3 className="text-xl font-bold text-[#1a0000]">{assessmentSummary.victimName}</h3>
                                     <p className="text-[#740000]">Assessment completed: {assessmentSummary.timestamp}</p>
-                                    <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-2 ${
-                                        assessmentSummary.priority === "High" 
-                                            ? "bg-[#b90000]/10 text-[#b90000] border border-[#b90000]/20"
-                                            : assessmentSummary.priority === "Medium"
+                                    <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-2 ${assessmentSummary.priority === "High"
+                                        ? "bg-[#b90000]/10 text-[#b90000] border border-[#b90000]/20"
+                                        : assessmentSummary.priority === "Medium"
                                             ? "bg-[#740000]/10 text-[#740000] border border-[#740000]/20"
                                             : "bg-[#1a0000]/10 text-[#1a0000] border border-[#1a0000]/20"
-                                    }`}>
+                                        }`}>
                                         Priority: {assessmentSummary.priority}
                                     </div>
                                 </div>
@@ -2442,6 +2897,34 @@ export default function FirstAiderDashboard() {
                                 <div className="grid md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="block text-sm font-medium text-[#1a0000]">
+                                            Emergency Alert ID *
+                                        </label>
+                                        <select
+                                            name="emergency_alert_id"
+                                            value={hospitalCommunicationData.emergency_alert_id}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                            required
+                                        >
+                                            <option value="">Select an emergency alert</option>
+                                            {assignments.map(assignment => (
+                                                <option key={assignment.id} value={assignment.id}>
+                                                    {assignment.id} - {assignment.type}
+                                                </option>
+                                            ))}
+                                            {victims.map(victim => (
+                                                <option key={victim.id} value={victim.id}>
+                                                    {victim.id} - {victim.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-[#740000]">
+                                            Select the emergency alert this communication relates to
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
                                             Select Hospital *
                                         </label>
                                         <select
@@ -2459,7 +2942,9 @@ export default function FirstAiderDashboard() {
                                             ))}
                                         </select>
                                     </div>
+                                </div>
 
+                                <div className="grid md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="block text-sm font-medium text-[#1a0000]">
                                             Priority
@@ -2476,6 +2961,19 @@ export default function FirstAiderDashboard() {
                                                 </option>
                                             ))}
                                         </select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-[#1a0000]">
+                                            Estimated Arrival (minutes)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            name="estimated_arrival_minutes"
+                                            value={hospitalCommunicationData.estimated_arrival_minutes}
+                                            onChange={handleHospitalCommunicationInputChange}
+                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                        />
                                     </div>
                                 </div>
 
@@ -2542,20 +3040,6 @@ export default function FirstAiderDashboard() {
 
                                 <div className="space-y-2">
                                     <label className="block text-sm font-medium text-[#1a0000]">
-                                        Vital Signs
-                                    </label>
-                                    <textarea
-                                        name="vital_signs"
-                                        value={hospitalCommunicationData.vital_signs}
-                                        onChange={handleHospitalCommunicationInputChange}
-                                        rows={2}
-                                        placeholder="Heart rate, BP, temperature, etc..."
-                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-[#1a0000]">
                                         First Aid Provided
                                     </label>
                                     <textarea
@@ -2568,34 +3052,6 @@ export default function FirstAiderDashboard() {
                                     />
                                 </div>
 
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Estimated Arrival (minutes)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            name="estimated_arrival_minutes"
-                                            value={hospitalCommunicationData.estimated_arrival_minutes}
-                                            onChange={handleHospitalCommunicationInputChange}
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="block text-sm font-medium text-[#1a0000]">
-                                            Blood Type Required
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="blood_type_required"
-                                            value={hospitalCommunicationData.blood_type_required}
-                                            onChange={handleHospitalCommunicationInputChange}
-                                            placeholder="e.g., O+"
-                                            className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
-                                        />
-                                    </div>
-                                </div>
-
                                 <div className="space-y-2">
                                     <label className="block text-sm font-medium text-[#1a0000]">
                                         Required Specialties
@@ -2605,7 +3061,7 @@ export default function FirstAiderDashboard() {
                                         name="required_specialties"
                                         value={hospitalCommunicationData.required_specialties}
                                         onChange={handleHospitalCommunicationInputChange}
-                                        placeholder="e.g., Trauma, Cardiology, Neurology"
+                                        placeholder="e.g., Trauma, Cardiology, Neurology (comma separated)"
                                         className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                                     />
                                 </div>
@@ -2619,7 +3075,21 @@ export default function FirstAiderDashboard() {
                                         name="equipment_needed"
                                         value={hospitalCommunicationData.equipment_needed}
                                         onChange={handleHospitalCommunicationInputChange}
-                                        placeholder="e.g., Ventilator, Defibrillator, CT Scan"
+                                        placeholder="e.g., Ventilator, Defibrillator, CT Scan (comma separated)"
+                                        className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-[#1a0000]">
+                                        Blood Type Required
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="blood_type_required"
+                                        value={hospitalCommunicationData.blood_type_required}
+                                        onChange={handleHospitalCommunicationInputChange}
+                                        placeholder="e.g., O+"
                                         className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent"
                                     />
                                 </div>
@@ -2727,7 +3197,7 @@ export default function FirstAiderDashboard() {
                         </div>
                     </div>
                 )}
-                
+
             </main>
         </div>
     )
