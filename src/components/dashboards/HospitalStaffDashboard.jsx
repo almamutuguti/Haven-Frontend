@@ -21,11 +21,11 @@ export default function HospitalStaffDashboard() {
     // Form states
     const [acknowledgeData, setAcknowledgeData] = useState({ preparation_notes: "" })
     const [preparationData, setPreparationData] = useState({
-        doctors_ready: false, 
-        nurses_ready: false, 
-        equipment_ready: false, 
-        bed_ready: false, 
-        blood_available: false, 
+        doctors_ready: false,
+        nurses_ready: false,
+        equipment_ready: false,
+        bed_ready: false,
+        blood_available: false,
         hospital_preparation_notes: ""
     })
 
@@ -94,7 +94,7 @@ export default function HospitalStaffDashboard() {
                     return
                 }
             }
-            
+
             // If no user data in localStorage, try API as last resort
             const response = await apiClient.get('/auth/user/')
             const userData = response.data
@@ -123,18 +123,18 @@ export default function HospitalStaffDashboard() {
             console.log('DEBUG - No current hospital set, skipping communications fetch')
             return
         }
-        
+
         console.log('DEBUG - Fetching communications for hospital:', currentHospital.id, currentHospital.name)
-        
+
         try {
             let communications = []
-            
+
             try {
                 // First try the filtered endpoint with hospital ID
                 console.log('DEBUG - Trying filtered endpoint with hospital ID:', currentHospital.id)
                 const response = await apiClient.get(`/hospital-comms/api/communications/?hospital=${currentHospital.id}`)
                 console.log('DEBUG - Filtered endpoint full response:', response)
-                
+
                 // Handle different response formats
                 if (Array.isArray(response)) {
                     communications = response
@@ -157,17 +157,17 @@ export default function HospitalStaffDashboard() {
                 } else {
                     communications = []
                 }
-                
+
                 console.log('DEBUG - Extracted communications from filtered endpoint:', communications)
 
             } catch (filterError) {
                 console.log('DEBUG - Filtered endpoint failed, trying general endpoint:', filterError)
-                
+
                 try {
                     // Fallback to general endpoint and filter manually
                     const response = await apiClient.get('/hospital-comms/api/communications/')
                     console.log('DEBUG - General endpoint response:', response)
-                    
+
                     let allComms = []
                     if (Array.isArray(response)) {
                         allComms = response
@@ -189,9 +189,9 @@ export default function HospitalStaffDashboard() {
                         console.log(`DEBUG - Comparing hospital: "${hospitalName}" with "${currentHospital.name}"`)
                         return hospitalName === currentHospital.name
                     })
-                    
+
                     console.log('DEBUG - Filtered communications:', communications)
-                    
+
                 } catch (generalError) {
                     console.error('DEBUG - All communication endpoints failed:', generalError)
                     throw new Error('Unable to fetch communications from database')
@@ -203,11 +203,11 @@ export default function HospitalStaffDashboard() {
             // Process communications - handle different field names and formats
             const processedCommunications = communications.map(comm => {
                 console.log('DEBUG - Processing communication:', comm)
-                
+
                 // Extract first aider information - handle different field name variations
                 const firstAiderId = comm.first_aider || comm.first_aider_id || comm.user_id
                 const firstAiderName = comm.first_aider_name || 'Unknown First Aider'
-                
+
                 console.log('DEBUG - First aider info:', { firstAiderId, firstAiderName })
 
                 // Handle different field name variations based on your Django model
@@ -228,11 +228,11 @@ export default function HospitalStaffDashboard() {
                     initial_assessment: comm.initial_assessment || '',
                     first_aid_provided: comm.first_aid_provided || 'Basic first aid provided',
                     estimated_arrival_minutes: comm.estimated_arrival_minutes || 15,
-                    required_specialties: Array.isArray(comm.required_specialties) 
-                        ? comm.required_specialties 
+                    required_specialties: Array.isArray(comm.required_specialties)
+                        ? comm.required_specialties
                         : (comm.required_specialties ? [comm.required_specialties] : []),
-                    equipment_needed: Array.isArray(comm.equipment_needed) 
-                        ? comm.equipment_needed 
+                    equipment_needed: Array.isArray(comm.equipment_needed)
+                        ? comm.equipment_needed
                         : (comm.equipment_needed ? [comm.equipment_needed] : []),
                     blood_type_required: comm.blood_type_required || '',
                     status: comm.status || 'pending',
@@ -251,7 +251,7 @@ export default function HospitalStaffDashboard() {
             setHospitalCommunications(processedCommunications)
 
             // Update stats - count only active communications (not failed or cancelled)
-            const activeComms = processedCommunications.filter(c => 
+            const activeComms = processedCommunications.filter(c =>
                 !['failed', 'cancelled', 'completed'].includes(c.status)
             ).length
 
@@ -277,7 +277,7 @@ export default function HospitalStaffDashboard() {
             // For now, use empty array since we don't have patients endpoint
             // In real implementation, you would fetch from /patients/?hospital=${currentHospital.id}
             setPatients([])
-            
+
             setStats(prev => ({
                 ...prev,
                 activePatients: 0,
@@ -331,7 +331,7 @@ export default function HospitalStaffDashboard() {
                 <div className="flex-1">
                     <h3 className="font-semibold text-[#1a0000]">Hospital Information</h3>
                     <p className="text-sm text-[#740000]">
-                        {currentHospital 
+                        {currentHospital
                             ? `You are registered to: ${currentHospital.name}`
                             : 'Hospital information loading...'
                         }
@@ -393,58 +393,29 @@ export default function HospitalStaffDashboard() {
         setShowPreparationModal(true)
     }
 
-    // Handle acknowledge submission - FIXED VERSION
+    // Handle acknowledge submission - UPDATED FOR HOSPITAL_STAFF ROLE
     const handleAcknowledge = async (e) => {
         e.preventDefault()
         try {
-            // Get user ID from multiple possible sources
-            let currentUserId = user?.id
-            
-            // If user ID is not available, try to get it from localStorage
-            if (!currentUserId) {
-                const savedUser = localStorage.getItem('haven_user')
-                if (savedUser) {
-                    try {
-                        const userData = JSON.parse(savedUser)
-                        currentUserId = userData.id || userData.user_id
-                    } catch (parseError) {
-                        console.warn('Could not parse user data from localStorage:', parseError)
-                    }
-                }
-            }
+            // Get current user info from auth context
+            const currentUserId = user?.id
 
-            // If still no user ID, use a reasonable fallback
             if (!currentUserId) {
-                console.warn('No user ID available, using fallback')
-                // Use the hospital staff's ID or a generic identifier
-                currentUserId = 'hospital_staff'
+                throw new Error('Unable to identify user. Please ensure you are logged in properly.')
             }
 
             console.log('DEBUG - Acknowledging communication:', {
                 communicationId: selectedCommunication.id,
                 acknowledgedBy: currentUserId,
-                preparationNotes: acknowledgeData.preparation_notes,
-                firstAiderInfo: {
-                    id: selectedCommunication.first_aider,
-                    name: selectedCommunication.first_aider_name
-                }
+                userRole: user?.role, // Debug user role
+                preparationNotes: acknowledgeData.preparation_notes
             })
 
             // Prepare acknowledge data
             const acknowledgePayload = {
                 acknowledged_by: currentUserId,
-                preparation_notes: acknowledgeData.preparation_notes || "Hospital acknowledged the emergency alert",
-                // Include reference to the first aider for tracking
-                first_aider_reference: selectedCommunication.first_aider,
-                hospital_id: currentHospital?.id
+                preparation_notes: acknowledgeData.preparation_notes || "Hospital acknowledged the emergency alert"
             }
-
-            // Clean up payload - remove undefined values
-            Object.keys(acknowledgePayload).forEach(key => {
-                if (acknowledgePayload[key] === undefined || acknowledgePayload[key] === null) {
-                    delete acknowledgePayload[key]
-                }
-            })
 
             console.log('DEBUG - Sending acknowledge payload:', acknowledgePayload)
 
@@ -461,24 +432,24 @@ export default function HospitalStaffDashboard() {
             setShowAcknowledgeModal(false)
             setSelectedCommunication(null)
             setAcknowledgeData({ preparation_notes: "" })
-            
+
             // Show success message
             alert('Emergency alert acknowledged successfully! The first aider has been notified.')
 
         } catch (error) {
             console.error('Failed to acknowledge communication:', error)
-            
-            // Enhanced error handling with specific messages
+
             let errorMessage = 'Failed to acknowledge communication. Please try again.'
-            
+
             if (error.response) {
                 console.error('Error response data:', error.response.data)
                 console.error('Error response status:', error.response.status)
-                
-                if (error.response.status === 404) {
+
+                if (error.response.status === 403) {
+                    errorMessage = 'Permission denied. Your account does not have permission to acknowledge communications. Please ensure your account has the hospital_staff role.'
+                } else if (error.response.status === 404) {
                     errorMessage = 'Acknowledge endpoint not found. Please contact support.'
                 } else if (error.response.status === 400) {
-                    // Try to extract specific validation errors
                     const errorData = error.response.data
                     if (typeof errorData === 'object') {
                         const validationErrors = Object.entries(errorData)
@@ -498,17 +469,16 @@ export default function HospitalStaffDashboard() {
             } else {
                 errorMessage = `Error: ${error.message}`
             }
-            
+
             alert(errorMessage)
         }
     }
-
     // Handle preparation update submission
     const handlePreparationUpdate = async (e) => {
         e.preventDefault()
         try {
             // Update preparation status in database using your Django API
-            const response = await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`, 
+            const response = await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`,
                 preparationData
             )
 
@@ -531,9 +501,9 @@ export default function HospitalStaffDashboard() {
 
     const handlePreparationInputChange = (e) => {
         const { name, value, type, checked } = e.target
-        setPreparationData(prev => ({ 
-            ...prev, 
-            [name]: type === 'checkbox' ? checked : value 
+        setPreparationData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
         }))
     }
 
@@ -593,11 +563,11 @@ export default function HospitalStaffDashboard() {
     // Format vital signs for display
     const formatVitalSigns = (vitalSigns) => {
         if (!vitalSigns) return 'N/A'
-        
+
         if (typeof vitalSigns === 'string') {
             return vitalSigns
         }
-        
+
         if (typeof vitalSigns === 'object') {
             const parts = []
             if (vitalSigns.heartRate) parts.push(`HR: ${vitalSigns.heartRate}bpm`)
@@ -607,13 +577,13 @@ export default function HospitalStaffDashboard() {
             if (vitalSigns.oxygenSaturation) parts.push(`SpO2: ${vitalSigns.oxygenSaturation}%`)
             return parts.join(', ') || 'Vitals recorded'
         }
-        
+
         return 'N/A'
     }
 
     // Filter communications to exclude failed and cancelled ones for display
     const getDisplayCommunications = () => {
-        return hospitalCommunications.filter(comm => 
+        return hospitalCommunications.filter(comm =>
             !['failed', 'cancelled', 'completed'].includes(comm.status)
         )
     }
@@ -657,7 +627,7 @@ export default function HospitalStaffDashboard() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
             <Sidebar />
-            
+
             <main className="ml-64 px-4 sm:px-6 lg:px-8 py-8">
                 {/* Page Title */}
                 <div className="mb-8">
@@ -719,14 +689,14 @@ export default function HospitalStaffDashboard() {
                                 <div className="mb-4 sm:mb-0">
                                     <h3 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Emergency Communications</h3>
                                     <p className="text-[#740000] text-sm sm:text-base">
-                                        {currentHospital 
+                                        {currentHospital
                                             ? `Incoming emergency alerts for ${currentHospital.name}`
                                             : 'Loading hospital communications...'
                                         }
                                     </p>
                                     <p className="text-xs text-[#740000] mt-1">
                                         Showing {displayCommunications.length} active communications
-                                        {hospitalCommunications.length > displayCommunications.length && 
+                                        {hospitalCommunications.length > displayCommunications.length &&
                                             ` (${hospitalCommunications.length - displayCommunications.length} failed/cancelled)`
                                         }
                                     </p>
@@ -746,13 +716,13 @@ export default function HospitalStaffDashboard() {
                                         <div className="text-center py-8">
                                             <MessageCircle className="w-12 h-12 text-[#740000]/50 mx-auto mb-4" />
                                             <p className="text-[#740000]">
-                                                {currentHospital 
+                                                {currentHospital
                                                     ? `No active communications for ${currentHospital.name}`
                                                     : 'Loading communications...'
                                                 }
                                             </p>
                                             <p className="text-[#740000] text-sm mt-2">
-                                                {hospitalCommunications.length > 0 
+                                                {hospitalCommunications.length > 0
                                                     ? `${hospitalCommunications.length} communications are in failed or cancelled state.`
                                                     : 'Communications from first aiders will appear here when they send alerts to your hospital.'
                                                 }
@@ -838,7 +808,7 @@ export default function HospitalStaffDashboard() {
                                                     </div>
                                                     <div className="flex gap-2 flex-wrap">
                                                         {(communication.status === 'sent' || communication.status === 'delivered') && (
-                                                            <button 
+                                                            <button
                                                                 onClick={() => handleOpenAcknowledge(communication)}
                                                                 className="px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors whitespace-nowrap"
                                                             >
@@ -846,7 +816,7 @@ export default function HospitalStaffDashboard() {
                                                             </button>
                                                         )}
                                                         {(communication.status === 'acknowledged' || communication.status === 'preparing') && (
-                                                            <button 
+                                                            <button
                                                                 onClick={() => handleOpenPreparation(communication)}
                                                                 className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors whitespace-nowrap"
                                                             >
@@ -1066,7 +1036,7 @@ export default function HospitalStaffDashboard() {
 
                             <div className="space-y-3">
                                 <h4 className="font-medium text-[#1a0000]">Preparation Checklist</h4>
-                                
+
                                 <label className="flex items-center space-x-3 p-2 hover:bg-[#ffe6c5] rounded transition-colors">
                                     <input
                                         type="checkbox"
