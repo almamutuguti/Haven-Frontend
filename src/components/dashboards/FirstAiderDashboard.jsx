@@ -106,7 +106,8 @@ export default function FirstAiderDashboard() {
         estimated_arrival_minutes: "15",
         required_specialties: [],
         equipment_needed: [],
-        blood_type_required: ""
+        blood_type_required: "",
+        first_aider: "" // Added first_aider field
     })
 
     // Communication Status Update Data
@@ -182,8 +183,8 @@ export default function FirstAiderDashboard() {
     const genderOptions = [
         { value: "male", label: "Male" },
         { value: "female", label: "Female" },
-        { value: "other", label: "Other" },
-        { value: "unknown", label: "Unknown" }
+        { value: "other", label: "Other" }
+
     ]
 
     // Condition options
@@ -607,48 +608,172 @@ export default function FirstAiderDashboard() {
             setIsLoading(false)
         }
     }
-    // Fetch hospital communications for this first aider - FIXED ENDPOINT
+
+    // Get first aider information from user profile - ENHANCED
+    const getFirstAiderInfo = () => {
+        if (!userProfile) {
+            console.log('DEBUG - No user profile available')
+            return null;
+        }
+
+        const firstAiderInfo = {
+            id: userProfile.id || userProfile.user_id,
+            name: `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim(),
+            contact: userProfile.phone_number || userProfile.contact_number || '',
+            organization: userProfile.organization?.name || userProfile.organization || '',
+            badge_number: userProfile.badge_number || userProfile.employee_id || ''
+        }
+
+        console.log('DEBUG - First aider info:', firstAiderInfo)
+        return firstAiderInfo;
+    }
+
+    // Fetch hospital communications for this first aider - ENHANCED VERSION
     const fetchHospitalCommunications = async () => {
         try {
-            // Try the correct endpoint first
-            let response;
-            try {
-                response = await apiClient.get('/hospital-comms/api/communications/first-aider-active/')
-            } catch (firstError) {
-                console.log('First endpoint failed, trying alternatives...', firstError)
-                try {
-                    // Try alternative endpoint
-                    response = await apiClient.get('/hospital-comms/api/communications/')
-                } catch (secondError) {
-                    console.log('All endpoints failed, using empty data', secondError)
-                    // Use empty data as fallback
-                    setHospitalCommunications([])
-                    setStats(prev => ({
-                        ...prev,
-                        activeCommunications: 0
-                    }))
-                    return
-                }
+            console.log('DEBUG - Fetching hospital communications...')
+
+            // Get first aider info to filter communications
+            const firstAiderInfo = getFirstAiderInfo();
+            console.log('DEBUG - First aider info:', firstAiderInfo);
+
+            if (!firstAiderInfo || !firstAiderInfo.id) {
+                console.warn('No first aider info available, cannot fetch communications')
+                setHospitalCommunications([])
+                return
             }
 
-            const communications = response?.data || []
+            let communications = [];
 
-            setHospitalCommunications(communications)
+            try {
+                // Try to fetch all communications and filter by first aider
+                const response = await apiClient.get('/hospital-comms/api/communications/')
+                console.log('DEBUG - Communications API response:', response)
 
+                // Extract communications array from response
+                if (Array.isArray(response)) {
+                    communications = response;
+                } else if (response && Array.isArray(response.data)) {
+                    communications = response.data;
+                } else if (response && response.data && Array.isArray(response.data.results)) {
+                    communications = response.data.results;
+                } else if (response && Array.isArray(response.results)) {
+                    communications = response.results;
+                } else {
+                    console.log('DEBUG - Unexpected response format, trying to extract data...', response);
+                    // Try to find communications in the response object
+                    communications = response?.communications || response?.data || [];
+                }
+
+                console.log('DEBUG - Raw communications:', communications);
+
+                // Log the structure of the first communication to understand the field names
+                if (communications.length > 0) {
+                    console.log('DEBUG - First communication structure:', communications[0]);
+                    console.log('DEBUG - Available keys in first communication:', Object.keys(communications[0]));
+                }
+
+                // Filter communications by first_aider - handle different field names
+                const filteredCommunications = communications.filter(comm => {
+                    // Try different possible field names for first aider ID
+                    const firstAiderId = comm.first_aider_id || comm.first_aider || comm.user_id || comm.firstAiderId;
+                    const firstAiderName = comm.first_aider_name;
+
+                    console.log(`DEBUG - Comparing ID: ${firstAiderId} with ${firstAiderInfo.id}`);
+                    console.log(`DEBUG - Comparing name: "${firstAiderName}" with "${firstAiderInfo.name}"`);
+
+                    // Check if either ID or name matches
+                    const idMatch = firstAiderId && firstAiderId.toString() === firstAiderInfo.id.toString();
+                    const nameMatch = firstAiderName && firstAiderInfo.name &&
+                        firstAiderName.toLowerCase().includes(firstAiderInfo.name.toLowerCase());
+
+                    console.log(`DEBUG - ID match: ${idMatch}, Name match: ${nameMatch}`);
+
+                    return idMatch || nameMatch;
+                });
+
+                communications = filteredCommunications;
+                console.log(`DEBUG - Filtered ${communications.length} communications for first aider ${firstAiderInfo.id}`);
+
+            } catch (apiError) {
+                console.error('DEBUG - Communications API failed:', apiError);
+                // For now, use all communications as fallback
+                communications = [];
+                console.log('DEBUG - Using empty communications data due to API error');
+            }
+
+            console.log('DEBUG - Final communications data:', communications);
+
+            // Ensure we have proper hospital names for display
+            const formattedCommunications = communications.map(comm => {
+                let hospitalName = comm.hospital_name;
+
+                // If no hospital name, try to get it from hospitals list or API
+                if (!hospitalName) {
+                    const hospital = hospitals.find(h => h.id == comm.hospital);
+                    if (hospital) {
+                        hospitalName = hospital.name;
+                    } else {
+                        hospitalName = `Hospital ${comm.hospital}`;
+                    }
+                }
+
+                return {
+                    id: comm.id,
+                    emergency_alert_id: comm.emergency_alert_id || comm.alert_reference_id,
+                    hospital_id: comm.hospital,
+                    hospital_name: hospitalName,
+                    first_aider: comm.first_aider || comm.first_aider_id,
+                    first_aider_name: comm.first_aider_name,
+                    priority: comm.priority || 'high',
+                    victim_name: comm.victim_name || 'Unknown Victim',
+                    victim_age: comm.victim_age,
+                    victim_gender: comm.victim_gender,
+                    chief_complaint: comm.chief_complaint || 'Emergency condition',
+                    vital_signs: comm.vital_signs || {},
+                    first_aid_provided: comm.first_aid_provided || 'Basic first aid',
+                    estimated_arrival_minutes: comm.estimated_arrival_minutes || 15,
+                    required_specialties: Array.isArray(comm.required_specialties)
+                        ? comm.required_specialties
+                        : (comm.required_specialties ? [comm.required_specialties] : []),
+                    equipment_needed: Array.isArray(comm.equipment_needed)
+                        ? comm.equipment_needed
+                        : (comm.equipment_needed ? [comm.equipment_needed] : []),
+                    blood_type_required: comm.blood_type_required || '',
+                    status: comm.status || 'pending',
+                    created_at: comm.created_at || new Date().toISOString(),
+                    updated_at: comm.updated_at || new Date().toISOString(),
+                    has_assessment: !!comm.assessment_data,
+                    originalData: comm
+                }
+            })
+
+            console.log('DEBUG - Formatted communications:', formattedCommunications)
+            setHospitalCommunications(formattedCommunications)
+
+            // Update stats
+            const activeComms = formattedCommunications.filter(c =>
+                ['sent', 'acknowledged', 'preparing', 'ready', 'en_route'].includes(c.status)
+            ).length
+
+            console.log(`DEBUG - Active communications: ${activeComms}`)
             setStats(prev => ({
                 ...prev,
-                activeCommunications: communications.filter(c =>
-                    ['sent', 'acknowledged', 'preparing', 'ready', 'en_route'].includes(c.status)
-                ).length
+                activeCommunications: activeComms
             }))
 
         } catch (error) {
             console.error('Failed to fetch hospital communications:', error)
-            // Set empty array instead of showing error to user
+            // Set empty array and log error for debugging
             setHospitalCommunications([])
+            setStats(prev => ({
+                ...prev,
+                activeCommunications: 0
+            }))
+
+            console.log('Hospital communications fetch failed, using empty data')
         }
     }
-
     // Fetch emergency history for victims data
     const fetchEmergencyHistory = async () => {
         try {
@@ -1077,6 +1202,8 @@ export default function FirstAiderDashboard() {
 
     // Open hospital communication form
     const handleOpenHospitalCommunication = (victim = null) => {
+        const firstAiderInfo = getFirstAiderInfo();
+
         setSelectedVictim(victim)
         setHospitalCommunicationData({
             emergency_alert_id: victim?.id || "",
@@ -1095,7 +1222,8 @@ export default function FirstAiderDashboard() {
             estimated_arrival_minutes: "15",
             required_specialties: [],
             equipment_needed: [],
-            blood_type_required: ""
+            blood_type_required: "",
+            first_aider: firstAiderInfo?.id || "" // Auto-populate first aider ID
         })
         setShowHospitalCommunicationForm(true)
     }
@@ -1116,34 +1244,63 @@ export default function FirstAiderDashboard() {
                 throw new Error("Please select an emergency alert or create one first")
             }
 
+            // Get first aider information
+            const firstAiderInfo = getFirstAiderInfo();
+            if (!firstAiderInfo || !firstAiderInfo.id) {
+                throw new Error("Unable to identify first aider. Please ensure you are logged in properly.")
+            }
+
             const selectedHospital = hospitals.find(h => h.id == hospitalCommunicationData.hospital_id)
 
             if (!selectedHospital) {
                 throw new Error("Selected hospital not found")
             }
 
-            // Prepare the communication data according to backend expectations
+            // Prepare the communication data
             const communicationData = {
                 emergency_alert_id: hospitalCommunicationData.emergency_alert_id,
-                hospital: hospitalCommunicationData.hospital_id,
-                priority: hospitalCommunicationData.priority,
-                victim_name: hospitalCommunicationData.victim_name,
+                hospital: parseInt(hospitalCommunicationData.hospital_id),
+                first_aider: firstAiderInfo.id,
+                priority: hospitalCommunicationData.priority || 'high',
+                victim_name: hospitalCommunicationData.victim_name || "Unknown Victim",
                 victim_age: hospitalCommunicationData.victim_age ? parseInt(hospitalCommunicationData.victim_age) : null,
-                victim_gender: hospitalCommunicationData.victim_gender,
-                chief_complaint: hospitalCommunicationData.chief_complaint,
-                vital_signs: hospitalCommunicationData.vital_signs,
-                first_aid_provided: hospitalCommunicationData.first_aid_provided,
+                victim_gender: hospitalCommunicationData.victim_gender || "unknown",
+                chief_complaint: hospitalCommunicationData.chief_complaint || "Emergency medical condition",
+                vital_signs: hospitalCommunicationData.vital_signs || {},
+                first_aid_provided: hospitalCommunicationData.first_aid_provided || "Basic first aid provided",
                 estimated_arrival_minutes: hospitalCommunicationData.estimated_arrival_minutes ? parseInt(hospitalCommunicationData.estimated_arrival_minutes) : 15,
                 required_specialties: Array.isArray(hospitalCommunicationData.required_specialties)
                     ? hospitalCommunicationData.required_specialties
-                    : hospitalCommunicationData.required_specialties.split(',').map(s => s.trim()).filter(s => s),
+                    : (hospitalCommunicationData.required_specialties
+                        ? hospitalCommunicationData.required_specialties.split(',').map(s => s.trim()).filter(s => s)
+                        : []),
                 equipment_needed: Array.isArray(hospitalCommunicationData.equipment_needed)
                     ? hospitalCommunicationData.equipment_needed
-                    : hospitalCommunicationData.equipment_needed.split(',').map(s => s.trim()).filter(s => s),
-                blood_type_required: hospitalCommunicationData.blood_type_required
+                    : (hospitalCommunicationData.equipment_needed
+                        ? hospitalCommunicationData.equipment_needed.split(',').map(s => s.trim()).filter(s => s)
+                        : []),
+                blood_type_required: hospitalCommunicationData.blood_type_required || ""
             }
 
-            console.log('Sending hospital communication:', communicationData)
+            // Clean up the data - remove empty arrays and null values
+            Object.keys(communicationData).forEach(key => {
+                if (communicationData[key] === null || communicationData[key] === undefined ||
+                    (Array.isArray(communicationData[key]) && communicationData[key].length === 0)) {
+                    delete communicationData[key];
+                }
+            });
+
+            // DEBUG: Log everything
+            console.group('HOSPITAL COMMUNICATION DEBUG 🚨');
+            console.log('Communication Data:', communicationData);
+            console.log('Emergency Alert ID:', {
+                value: communicationData.emergency_alert_id,
+                type: typeof communicationData.emergency_alert_id,
+                isArray: Array.isArray(communicationData.emergency_alert_id)
+            });
+            console.groupEnd();
+
+            console.log('Sending to API:', JSON.stringify(communicationData, null, 2));
 
             const response = await apiClient.post('/hospital-comms/api/communications/', communicationData)
 
@@ -1171,7 +1328,34 @@ export default function FirstAiderDashboard() {
 
         } catch (error) {
             console.error('Hospital communication failed:', error)
-            setFormError(error.message || "Failed to send hospital communication")
+
+            // More detailed error handling
+            if (error.response) {
+                // Server responded with error status
+                console.error('Server error response:', error.response.data)
+                if (error.response.status === 500) {
+                    setFormError("Server error: The hospital communication could not be processed. Please check the data and try again.")
+                } else if (error.response.status === 400) {
+                    // Handle validation errors specifically
+                    const errorData = error.response.data;
+                    if (typeof errorData === 'object') {
+                        const errorMessages = Object.entries(errorData).map(([field, messages]) =>
+                            `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`
+                        );
+                        setFormError(`Validation error: ${errorMessages.join('; ')}`)
+                    } else {
+                        setFormError(`Validation error: ${errorData}`)
+                    }
+                } else {
+                    setFormError(`Server error (${error.response.status}): ${error.response.data?.detail || error.response.statusText}`)
+                }
+            } else if (error.request) {
+                // Request was made but no response received
+                setFormError("Network error: Unable to connect to the server. Please check your internet connection.")
+            } else {
+                // Something else happened
+                setFormError(error.message || "Failed to send hospital communication")
+            }
         } finally {
             setIsSubmitting(false)
         }
@@ -1601,7 +1785,28 @@ export default function FirstAiderDashboard() {
                             <div className="flex flex-row items-center justify-between p-6 border-b border-[#ffe6c5]">
                                 <div>
                                     <h3 className="text-2xl font-bold text-[#1a0000]">Hospital Communications</h3>
-                                    <p className="text-[#740000]">Communications with hospitals about victims</p>
+                                    <p className="text-[#740000]">
+                                        {hospitalCommunications.length > 0
+                                            ? `${hospitalCommunications.length} communication(s) found`
+                                            : 'No communications yet'
+                                        }
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={fetchHospitalCommunications}
+                                        className="px-3 py-2 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
+                                        title="Refresh Communications"
+                                    >
+                                        Refresh
+                                    </button>
+                                    <button
+                                        onClick={() => setShowHospitalCommunicationForm(true)}
+                                        className="px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium text-sm transition-colors"
+                                    >
+                                        <Plus className="w-4 h-4 mr-2 inline" />
+                                        Create Communication
+                                    </button>
                                 </div>
                             </div>
                             <div className="p-6">
@@ -1609,7 +1814,10 @@ export default function FirstAiderDashboard() {
                                     {hospitalCommunications.length === 0 ? (
                                         <div className="text-center py-8">
                                             <MessageCircle className="w-12 h-12 text-[#740000]/50 mx-auto mb-4" />
-                                            <p className="text-[#740000]">No active hospital communications</p>
+                                            <p className="text-[#740000]">No hospital communications found</p>
+                                            <p className="text-[#740000] text-sm mt-2">
+                                                Create your first communication to notify hospitals about victims.
+                                            </p>
                                             <button
                                                 onClick={() => setShowHospitalCommunicationForm(true)}
                                                 className="mt-4 px-4 py-2 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium text-sm transition-colors"
@@ -1627,7 +1835,7 @@ export default function FirstAiderDashboard() {
                                                 <div className="flex items-start justify-between mb-3">
                                                     <div className="flex items-start gap-3 flex-1">
                                                         <MessageCircle className="w-5 h-5 text-[#b90000] mt-1" />
-                                                        <div>
+                                                        <div className="flex-1">
                                                             <h3 className="font-semibold text-[#1a0000]">
                                                                 {communication.victim_name || "Unknown Victim"}
                                                             </h3>
@@ -1638,25 +1846,65 @@ export default function FirstAiderDashboard() {
                                                             <p className="text-sm text-[#740000] mt-1">
                                                                 {communication.chief_complaint}
                                                             </p>
+                                                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                                                <span className="text-xs text-[#740000]">
+                                                                    Created: {new Date(communication.created_at).toLocaleDateString()}
+                                                                </span>
+                                                                {communication.victim_age && (
+                                                                    <span className="text-xs text-[#740000]">
+                                                                        Age: {communication.victim_age}
+                                                                    </span>
+                                                                )}
+                                                                {communication.victim_gender && (
+                                                                    <span className="text-xs text-[#740000]">
+                                                                        Gender: {communication.victim_gender}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-col items-end gap-2">
                                                         <span
                                                             className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(communication.priority)}`}
                                                         >
-                                                            {communication.priority}
+                                                            {communication.priority?.charAt(0).toUpperCase() + communication.priority?.slice(1) || 'High'}
                                                         </span>
                                                         <span
                                                             className={`px-2 py-1 rounded-full text-xs font-medium border ${getCommunicationStatusColor(communication.status)}`}
                                                         >
-                                                            {communication.status}
+                                                            {communication.status?.charAt(0).toUpperCase() + communication.status?.slice(1) || 'Pending'}
                                                         </span>
                                                     </div>
                                                 </div>
+
+                                                {/* Additional Communication Details */}
+                                                <div className="grid grid-cols-2 gap-4 text-sm text-[#740000] mb-3">
+                                                    <div>
+                                                        <span className="font-medium">First Aid Provided:</span>
+                                                        <p className="text-[#1a0000]">{communication.first_aid_provided}</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-medium">ETA:</span>
+                                                        <p className="text-[#1a0000]">{communication.estimated_arrival_minutes} minutes</p>
+                                                    </div>
+                                                </div>
+
+                                                {communication.required_specialties && communication.required_specialties.length > 0 && (
+                                                    <div className="mb-3">
+                                                        <span className="text-sm font-medium text-[#740000]">Required Specialties: </span>
+                                                        <span className="text-sm text-[#1a0000]">
+                                                            {Array.isArray(communication.required_specialties)
+                                                                ? communication.required_specialties.join(', ')
+                                                                : communication.required_specialties
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                )}
+
                                                 <div className="flex items-center justify-between text-sm pt-3 border-t border-[#ffe6c5]">
                                                     <div className="flex gap-4 text-[#740000]">
-                                                        <span>ETA: {communication.estimated_arrival_minutes} mins</span>
-                                                        <span>Created: {new Date(communication.created_at).toLocaleDateString()}</span>
+                                                        <span>Updated: {new Date(communication.updated_at).toLocaleDateString()}</span>
+                                                        <span>ID: {communication.id}</span>
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <button
@@ -1895,12 +2143,11 @@ export default function FirstAiderDashboard() {
                     </div>
                 </div>
 
-                {/* All modal components remain the same as in your original code */}
                 {/* Emergency Form Modal */}
                 {showEmergencyForm && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
-                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">Report Emergency</h2>
                                 <button
                                     onClick={() => setShowEmergencyForm(false)}
@@ -2000,7 +2247,7 @@ export default function FirstAiderDashboard() {
                                     </p>
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
+                                <div className="flex gap-4 pt-4 sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         type="button"
                                         onClick={() => setShowEmergencyForm(false)}
@@ -2024,8 +2271,8 @@ export default function FirstAiderDashboard() {
                 {/* Status Update Modal */}
                 {showStatusUpdateForm && selectedAssignment && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
-                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">Update Assignment Status</h2>
                                 <button
                                     onClick={() => setShowStatusUpdateForm(false)}
@@ -2100,7 +2347,7 @@ export default function FirstAiderDashboard() {
                                     />
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
+                                <div className="flex gap-4 pt-4 sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         type="button"
                                         onClick={() => setShowStatusUpdateForm(false)}
@@ -2125,7 +2372,7 @@ export default function FirstAiderDashboard() {
                 {showVictimAssessmentForm && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">
                                     {selectedVictim ? 'Update Victim Assessment' : 'New Victim Assessment'}
                                 </h2>
@@ -2373,7 +2620,7 @@ export default function FirstAiderDashboard() {
                                             <label className="block text-sm font-medium text-[#1a0000] mb-2">
                                                 Symptoms
                                             </label>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 border border-[#ffe6c5] rounded-md">
                                                 {symptomOptions.map(symptom => (
                                                     <label key={symptom} className="flex items-center space-x-2">
                                                         <input
@@ -2391,7 +2638,7 @@ export default function FirstAiderDashboard() {
                                             <label className="block text-sm font-medium text-[#1a0000] mb-2">
                                                 Injuries
                                             </label>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 border border-[#ffe6c5] rounded-md">
                                                 {injuryOptions.map(injury => (
                                                     <label key={injury} className="flex items-center space-x-2">
                                                         <input
@@ -2658,7 +2905,7 @@ export default function FirstAiderDashboard() {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4 pt-6 border-t border-[#ffe6c5]">
+                                <div className="flex gap-4 pt-6 border-t border-[#ffe6c5] sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         type="button"
                                         onClick={() => setShowVictimAssessmentForm(false)}
@@ -2683,7 +2930,7 @@ export default function FirstAiderDashboard() {
                 {showAssessmentSummary && assessmentSummary && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">Assessment Summary</h2>
                                 <button
                                     onClick={() => setShowAssessmentSummary(false)}
@@ -2847,7 +3094,7 @@ export default function FirstAiderDashboard() {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4 pt-6 border-t border-[#ffe6c5]">
+                                <div className="flex gap-4 pt-6 border-t border-[#ffe6c5] sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         onClick={() => setShowAssessmentSummary(false)}
                                         className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
@@ -2873,7 +3120,7 @@ export default function FirstAiderDashboard() {
                 {showHospitalCommunicationForm && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">Send Hospital Communication</h2>
                                 <button
                                     onClick={() => setShowHospitalCommunicationForm(false)}
@@ -2891,6 +3138,33 @@ export default function FirstAiderDashboard() {
                                 {formSuccess && (
                                     <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
                                         {formSuccess}
+                                    </div>
+                                )}
+
+                                {/* First Aider Information Display */}
+                                {userProfile && (
+                                    <div className="bg-[#ffe6c5] p-4 rounded-lg mb-4">
+                                        <h4 className="font-semibold text-[#1a0000] mb-2">First Aider Information</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <div>
+                                                <span className="text-[#740000]">Name:</span>
+                                                <p className="text-[#1a0000] font-medium">
+                                                    {userProfile.first_name} {userProfile.last_name}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <span className="text-[#740000]">Organization:</span>
+                                                <p className="text-[#1a0000] font-medium">
+                                                    {userProfile.organization?.name || userProfile.organization || 'Not specified'}
+                                                </p>
+                                            </div>
+                                            {userProfile.phone_number && (
+                                                <div>
+                                                    <span className="text-[#740000]">Contact:</span>
+                                                    <p className="text-[#1a0000] font-medium">{userProfile.phone_number}</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 
@@ -3094,7 +3368,7 @@ export default function FirstAiderDashboard() {
                                     />
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
+                                <div className="flex gap-4 pt-4 sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         type="button"
                                         onClick={() => setShowHospitalCommunicationForm(false)}
@@ -3118,8 +3392,8 @@ export default function FirstAiderDashboard() {
                 {/* Communication Status Update Modal */}
                 {showCommunicationStatusForm && selectedCommunication && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
-                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
+                        <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">Update Communication Status</h2>
                                 <button
                                     onClick={() => setShowCommunicationStatusForm(false)}
@@ -3177,7 +3451,7 @@ export default function FirstAiderDashboard() {
                                     />
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
+                                <div className="flex gap-4 pt-4 sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         type="button"
                                         onClick={() => setShowCommunicationStatusForm(false)}

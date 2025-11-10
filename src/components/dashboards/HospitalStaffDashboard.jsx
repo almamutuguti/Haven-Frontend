@@ -1,7 +1,7 @@
 "use client"
 
 import { Sidebar } from "../SideBar"
-import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X } from "lucide-react"
+import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X, RefreshCw } from "lucide-react"
 import { useState, useEffect } from "react"
 import { apiClient } from "../../utils/api"
 import { useAuth } from "../context/AuthContext"
@@ -15,13 +15,18 @@ export default function HospitalStaffDashboard() {
     const [showPreparationModal, setShowPreparationModal] = useState(false)
     const [selectedCommunication, setSelectedCommunication] = useState(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [isRefreshing, setIsRefreshing] = useState(false)
     const { user } = useAuth()
 
     // Form states
     const [acknowledgeData, setAcknowledgeData] = useState({ preparation_notes: "" })
     const [preparationData, setPreparationData] = useState({
-        doctors_ready: false, nurses_ready: false, equipment_ready: false, 
-        bed_ready: false, blood_available: false, hospital_preparation_notes: ""
+        doctors_ready: false, 
+        nurses_ready: false, 
+        equipment_ready: false, 
+        bed_ready: false, 
+        blood_available: false, 
+        hospital_preparation_notes: ""
     })
 
     // Stats
@@ -34,16 +39,24 @@ export default function HospitalStaffDashboard() {
 
     // Initialize current hospital based on user's registered hospital
     useEffect(() => {
-        if (user?.hospital) {
-            // Use the hospital from user registration
-            setCurrentHospital(user.hospital)
-            localStorage.setItem('currentHospital', JSON.stringify(user.hospital))
-        } else if (user?.hospital_id) {
-            // If hospital is just an ID, fetch the hospital details
-            fetchHospitalDetails(user.hospital_id)
-        } else {
-            console.log('No hospital assigned to user:', user)
+        const initializeHospital = async () => {
+            if (user?.hospital) {
+                setCurrentHospital(user.hospital)
+                localStorage.setItem('currentHospital', JSON.stringify(user.hospital))
+            } else if (user?.hospital_id) {
+                await fetchHospitalDetails(user.hospital_id)
+            } else {
+                console.log('No hospital assigned to user:', user)
+                const savedHospital = localStorage.getItem('currentHospital')
+                if (savedHospital) {
+                    setCurrentHospital(JSON.parse(savedHospital))
+                } else {
+                    await fetchUserHospital()
+                }
+            }
         }
+
+        initializeHospital()
     }, [user])
 
     // Fetch hospital details by ID
@@ -55,7 +68,6 @@ export default function HospitalStaffDashboard() {
             localStorage.setItem('currentHospital', JSON.stringify(hospitalData))
         } catch (error) {
             console.error('Failed to fetch hospital details:', error)
-            // Fallback: create a basic hospital object from ID
             const fallbackHospital = {
                 id: hospitalId,
                 name: `Hospital ${hospitalId}`,
@@ -66,87 +78,219 @@ export default function HospitalStaffDashboard() {
         }
     }
 
-    // Fetch communications specifically for the current hospital
-    const fetchHospitalCommunications = async () => {
-        if (!currentHospital) return
-        
+    // Fetch user's hospital if not directly available
+    const fetchUserHospital = async () => {
         try {
-            // Try to fetch communications specifically for this hospital
-            const response = await apiClient.get(`/hospital-comms/api/communications/hospital/${currentHospital.id}/`)
-            const communications = response.data || []
-            
-            setAllCommunications(communications)
-            setHospitalCommunications(communications)
-
-            // Update stats
-            setStats(prev => ({
-                ...prev,
-                pendingCommunications: communications.filter(c => 
-                    ['sent', 'acknowledged'].includes(c.status)
-                ).length
-            }))
-
-        } catch (error) {
-            console.error('Failed to fetch hospital-specific communications:', error)
-            // Fallback to fetching all and filtering client-side
-            try {
-                const response = await apiClient.get('/hospital-comms/api/communications/')
-                const allComms = response.data || []
-                
-                // Client-side filtering by hospital_id
-                const filteredComms = allComms.filter(comm => 
-                    comm.hospital_id === currentHospital.id
-                )
-                
-                setAllCommunications(filteredComms)
-                setHospitalCommunications(filteredComms)
-                
-                setStats(prev => ({
-                    ...prev,
-                    pendingCommunications: filteredComms.filter(c => 
-                        ['sent', 'acknowledged'].includes(c.status)
-                    ).length
-                }))
-            } catch (fallbackError) {
-                console.error('Fallback fetch also failed:', fallbackError)
-                setAllCommunications([])
-                setHospitalCommunications([])
+            // Try to get user info from localStorage as fallback
+            const savedUser = localStorage.getItem('haven_user')
+            if (savedUser) {
+                const userData = JSON.parse(savedUser)
+                if (userData.hospital) {
+                    setCurrentHospital(userData.hospital)
+                    localStorage.setItem('currentHospital', JSON.stringify(userData.hospital))
+                    return
+                } else if (userData.hospital_id) {
+                    await fetchHospitalDetails(userData.hospital_id)
+                    return
+                }
             }
+            
+            // If no user data in localStorage, try API as last resort
+            const response = await apiClient.get('/auth/user/')
+            const userData = response.data
+            if (userData.hospital) {
+                setCurrentHospital(userData.hospital)
+                localStorage.setItem('currentHospital', JSON.stringify(userData.hospital))
+            } else if (userData.hospital_id) {
+                await fetchHospitalDetails(userData.hospital_id)
+            }
+        } catch (error) {
+            console.error('Failed to fetch user hospital:', error)
+            // Set a default hospital if all else fails
+            const defaultHospital = {
+                id: 1,
+                name: "General Hospital",
+                location: "Nairobi"
+            }
+            setCurrentHospital(defaultHospital)
+            localStorage.setItem('currentHospital', JSON.stringify(defaultHospital))
         }
     }
 
-    // Fetch patients data
-    const fetchPatients = async () => {
+    // Enhanced fetch for hospital communications from database - WITH FIRST AIDER INFO
+    const fetchHospitalCommunications = async () => {
+        if (!currentHospital) {
+            console.log('DEBUG - No current hospital set, skipping communications fetch')
+            return
+        }
+        
+        console.log('DEBUG - Fetching communications for hospital:', currentHospital.id, currentHospital.name)
+        
         try {
-            // Mock patients data - in real app, filter by current hospital
-            setPatients([
-                {
-                    id: "P001",
-                    name: "John Doe",
-                    age: 45,
-                    condition: "Trauma",
-                    status: "stable",
-                    admittedAt: "2 hours ago",
-                },
-                {
-                    id: "P002",
-                    name: "Jane Smith",
-                    age: 32,
-                    condition: "Burn",
-                    status: "critical",
-                    admittedAt: "30 mins ago",
-                },
-            ])
+            let communications = []
             
-            // Update stats
+            try {
+                // First try the filtered endpoint with hospital ID
+                console.log('DEBUG - Trying filtered endpoint with hospital ID:', currentHospital.id)
+                const response = await apiClient.get(`/hospital-comms/api/communications/?hospital=${currentHospital.id}`)
+                console.log('DEBUG - Filtered endpoint full response:', response)
+                
+                // Handle different response formats
+                if (Array.isArray(response)) {
+                    communications = response
+                    console.log('DEBUG - Response is direct array with', communications.length, 'items')
+                } else if (response && Array.isArray(response.data)) {
+                    communications = response.data
+                    console.log('DEBUG - Response has data array with', communications.length, 'items')
+                } else if (response && typeof response === 'object') {
+                    // Try to extract from various possible structures
+                    if (Array.isArray(response.results)) {
+                        communications = response.results
+                    } else if (Array.isArray(response.communications)) {
+                        communications = response.communications
+                    } else if (Array.isArray(response.data)) {
+                        communications = response.data
+                    } else {
+                        console.log('DEBUG - Could not extract array from response object, trying response directly')
+                        communications = response || []
+                    }
+                } else {
+                    communications = []
+                }
+                
+                console.log('DEBUG - Extracted communications from filtered endpoint:', communications)
+
+            } catch (filterError) {
+                console.log('DEBUG - Filtered endpoint failed, trying general endpoint:', filterError)
+                
+                try {
+                    // Fallback to general endpoint and filter manually
+                    const response = await apiClient.get('/hospital-comms/api/communications/')
+                    console.log('DEBUG - General endpoint response:', response)
+                    
+                    let allComms = []
+                    if (Array.isArray(response)) {
+                        allComms = response
+                    } else if (response && Array.isArray(response.data)) {
+                        allComms = response.data
+                    } else if (response && response.data && Array.isArray(response.data.results)) {
+                        allComms = response.data.results
+                    } else if (response && Array.isArray(response.results)) {
+                        allComms = response.results
+                    } else {
+                        allComms = response?.communications || response?.data || []
+                    }
+
+                    console.log('DEBUG - All communications from general endpoint:', allComms)
+
+                    // Filter by hospital name since we have hospital_name in the response
+                    communications = allComms.filter(comm => {
+                        const hospitalName = comm.hospital_name || comm.hospital?.name
+                        console.log(`DEBUG - Comparing hospital: "${hospitalName}" with "${currentHospital.name}"`)
+                        return hospitalName === currentHospital.name
+                    })
+                    
+                    console.log('DEBUG - Filtered communications:', communications)
+                    
+                } catch (generalError) {
+                    console.error('DEBUG - All communication endpoints failed:', generalError)
+                    throw new Error('Unable to fetch communications from database')
+                }
+            }
+
+            console.log('DEBUG - Final communications data before processing:', communications)
+
+            // Process communications - handle different field names and formats
+            const processedCommunications = communications.map(comm => {
+                console.log('DEBUG - Processing communication:', comm)
+                
+                // Extract first aider information - handle different field name variations
+                const firstAiderId = comm.first_aider || comm.first_aider_id || comm.user_id
+                const firstAiderName = comm.first_aider_name || 'Unknown First Aider'
+                
+                console.log('DEBUG - First aider info:', { firstAiderId, firstAiderName })
+
+                // Handle different field name variations based on your Django model
+                const communication = {
+                    id: comm.id,
+                    emergency_alert_id: comm.emergency_alert_id || comm.alert_reference_id,
+                    alert_reference_id: comm.alert_reference_id || comm.emergency_alert_id,
+                    hospital_id: comm.hospital_id || comm.hospital?.id,
+                    hospital_name: comm.hospital_name || comm.hospital?.name,
+                    first_aider: firstAiderId,
+                    first_aider_name: firstAiderName,
+                    priority: comm.priority || 'high',
+                    victim_name: comm.victim_name || 'Unknown Victim',
+                    victim_age: comm.victim_age,
+                    victim_gender: comm.victim_gender,
+                    chief_complaint: comm.chief_complaint || 'Emergency condition',
+                    vital_signs: comm.vital_signs || {},
+                    initial_assessment: comm.initial_assessment || '',
+                    first_aid_provided: comm.first_aid_provided || 'Basic first aid provided',
+                    estimated_arrival_minutes: comm.estimated_arrival_minutes || 15,
+                    required_specialties: Array.isArray(comm.required_specialties) 
+                        ? comm.required_specialties 
+                        : (comm.required_specialties ? [comm.required_specialties] : []),
+                    equipment_needed: Array.isArray(comm.equipment_needed) 
+                        ? comm.equipment_needed 
+                        : (comm.equipment_needed ? [comm.equipment_needed] : []),
+                    blood_type_required: comm.blood_type_required || '',
+                    status: comm.status || 'pending',
+                    created_at: comm.created_at || new Date().toISOString(),
+                    updated_at: comm.updated_at || new Date().toISOString(),
+                    sent_to_hospital_at: comm.sent_to_hospital_at,
+                    hospital_ready_at: comm.hospital_ready_at,
+                    originalData: comm // Keep original data for reference
+                }
+
+                return communication
+            })
+
+            console.log('DEBUG - Processed communications:', processedCommunications)
+            setAllCommunications(processedCommunications)
+            setHospitalCommunications(processedCommunications)
+
+            // Update stats - count only active communications (not failed or cancelled)
+            const activeComms = processedCommunications.filter(c => 
+                !['failed', 'cancelled', 'completed'].includes(c.status)
+            ).length
+
             setStats(prev => ({
                 ...prev,
-                activePatients: 2,
-                criticalCases: 1
+                pendingCommunications: activeComms
+            }))
+
+        } catch (error) {
+            console.error('Failed to fetch hospital communications from database:', error)
+            setAllCommunications([])
+            setHospitalCommunications([])
+            setStats(prev => ({
+                ...prev,
+                pendingCommunications: 0
+            }))
+        }
+    }
+
+    // Fetch patients data from database
+    const fetchPatients = async () => {
+        try {
+            // For now, use empty array since we don't have patients endpoint
+            // In real implementation, you would fetch from /patients/?hospital=${currentHospital.id}
+            setPatients([])
+            
+            setStats(prev => ({
+                ...prev,
+                activePatients: 0,
+                criticalCases: 0
             }))
         } catch (error) {
-            console.error('Failed to fetch patients:', error)
+            console.error('Failed to fetch patients from database:', error)
             setPatients([])
+            setStats(prev => ({
+                ...prev,
+                activePatients: 0,
+                criticalCases: 0
+            }))
         }
     }
 
@@ -165,11 +309,26 @@ export default function HospitalStaffDashboard() {
         }
     }, [currentHospital])
 
+    // Refresh communications and data
+    const refreshCommunications = async () => {
+        setIsRefreshing(true)
+        try {
+            await Promise.all([
+                fetchHospitalCommunications(),
+                fetchPatients()
+            ])
+        } catch (error) {
+            console.error('Error refreshing data:', error)
+        } finally {
+            setIsRefreshing(false)
+        }
+    }
+
     // Hospital info component
     const HospitalInfo = () => (
         <div className="mb-6 p-4 bg-[#ffe6c5] rounded-lg border border-[#ffe6c5]">
-            <div className="flex items-center justify-between">
-                <div>
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="flex-1">
                     <h3 className="font-semibold text-[#1a0000]">Hospital Information</h3>
                     <p className="text-sm text-[#740000]">
                         {currentHospital 
@@ -177,22 +336,32 @@ export default function HospitalStaffDashboard() {
                             : 'Hospital information loading...'
                         }
                     </p>
-                </div>
-                <div className="flex items-center gap-2 text-[#1a0000]">
-                    <Building className="w-5 h-5" />
-                    <span className="font-medium">{currentHospital?.name}</span>
-                </div>
-            </div>
-            {currentHospital && (
-                <div className="mt-2 text-sm text-[#1a0000]">
-                    Currently viewing communications for: <strong>{currentHospital.name}</strong>
-                    {allCommunications.length > 0 && (
-                        <span className="text-[#740000] ml-2">
-                            ({hospitalCommunications.length} communications)
-                        </span>
+                    {currentHospital && (
+                        <div className="mt-2 text-sm text-[#1a0000]">
+                            Currently viewing communications for: <strong>{currentHospital.name}</strong>
+                            {hospitalCommunications.length > 0 && (
+                                <span className="text-[#740000] ml-2">
+                                    ({hospitalCommunications.length} communications)
+                                </span>
+                            )}
+                        </div>
                     )}
                 </div>
-            )}
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 text-[#1a0000]">
+                        <Building className="w-5 h-5" />
+                        <span className="font-medium">{currentHospital?.name}</span>
+                    </div>
+                    <button
+                        onClick={refreshCommunications}
+                        disabled={isRefreshing}
+                        className="px-4 py-2 bg-[#b90000] hover:bg-[#740000] disabled:bg-[#740000]/50 text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center gap-2"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                </div>
+            </div>
             {!user?.hospital && !user?.hospital_id && (
                 <div className="mt-2 text-xs text-[#b90000]">
                     * Your account is not registered to a specific hospital. Contact admin to update your hospital assignment.
@@ -214,37 +383,123 @@ export default function HospitalStaffDashboard() {
     const handleOpenPreparation = (communication) => {
         setSelectedCommunication(communication)
         setPreparationData({
-            doctors_ready: false,
-            nurses_ready: false,
-            equipment_ready: false,
-            bed_ready: false,
-            blood_available: false,
-            hospital_preparation_notes: ""
+            doctors_ready: communication.doctors_ready || false,
+            nurses_ready: communication.nurses_ready || false,
+            equipment_ready: communication.equipment_ready || false,
+            bed_ready: communication.bed_ready || false,
+            blood_available: communication.blood_available || false,
+            hospital_preparation_notes: communication.hospital_preparation_notes || ""
         })
         setShowPreparationModal(true)
     }
 
-    // Handle acknowledge submission
+    // Handle acknowledge submission - FIXED VERSION
     const handleAcknowledge = async (e) => {
         e.preventDefault()
         try {
-            const userResponse = await apiClient.get('/auth/user/')
-            const currentUser = userResponse.data
+            // Get user ID from multiple possible sources
+            let currentUserId = user?.id
             
-            await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/acknowledge/`, {
-                acknowledged_by: currentUser.id,
-                preparation_notes: acknowledgeData.preparation_notes,
-                hospital_id: currentHospital.id
+            // If user ID is not available, try to get it from localStorage
+            if (!currentUserId) {
+                const savedUser = localStorage.getItem('haven_user')
+                if (savedUser) {
+                    try {
+                        const userData = JSON.parse(savedUser)
+                        currentUserId = userData.id || userData.user_id
+                    } catch (parseError) {
+                        console.warn('Could not parse user data from localStorage:', parseError)
+                    }
+                }
+            }
+
+            // If still no user ID, use a reasonable fallback
+            if (!currentUserId) {
+                console.warn('No user ID available, using fallback')
+                // Use the hospital staff's ID or a generic identifier
+                currentUserId = 'hospital_staff'
+            }
+
+            console.log('DEBUG - Acknowledging communication:', {
+                communicationId: selectedCommunication.id,
+                acknowledgedBy: currentUserId,
+                preparationNotes: acknowledgeData.preparation_notes,
+                firstAiderInfo: {
+                    id: selectedCommunication.first_aider,
+                    name: selectedCommunication.first_aider_name
+                }
             })
 
-            // Refresh communications
+            // Prepare acknowledge data
+            const acknowledgePayload = {
+                acknowledged_by: currentUserId,
+                preparation_notes: acknowledgeData.preparation_notes || "Hospital acknowledged the emergency alert",
+                // Include reference to the first aider for tracking
+                first_aider_reference: selectedCommunication.first_aider,
+                hospital_id: currentHospital?.id
+            }
+
+            // Clean up payload - remove undefined values
+            Object.keys(acknowledgePayload).forEach(key => {
+                if (acknowledgePayload[key] === undefined || acknowledgePayload[key] === null) {
+                    delete acknowledgePayload[key]
+                }
+            })
+
+            console.log('DEBUG - Sending acknowledge payload:', acknowledgePayload)
+
+            // Update communication status in database
+            const response = await apiClient.post(
+                `/hospital-comms/api/communications/${selectedCommunication.id}/acknowledge/`,
+                acknowledgePayload
+            )
+
+            console.log('DEBUG - Acknowledge response:', response)
+
+            // Refresh communications from database
             await fetchHospitalCommunications()
             setShowAcknowledgeModal(false)
             setSelectedCommunication(null)
+            setAcknowledgeData({ preparation_notes: "" })
+            
+            // Show success message
+            alert('Emergency alert acknowledged successfully! The first aider has been notified.')
 
         } catch (error) {
             console.error('Failed to acknowledge communication:', error)
-            alert('Failed to acknowledge communication. Please try again.')
+            
+            // Enhanced error handling with specific messages
+            let errorMessage = 'Failed to acknowledge communication. Please try again.'
+            
+            if (error.response) {
+                console.error('Error response data:', error.response.data)
+                console.error('Error response status:', error.response.status)
+                
+                if (error.response.status === 404) {
+                    errorMessage = 'Acknowledge endpoint not found. Please contact support.'
+                } else if (error.response.status === 400) {
+                    // Try to extract specific validation errors
+                    const errorData = error.response.data
+                    if (typeof errorData === 'object') {
+                        const validationErrors = Object.entries(errorData)
+                            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+                            .join('; ')
+                        errorMessage = `Validation error: ${validationErrors}`
+                    } else {
+                        errorMessage = `Invalid data: ${errorData}`
+                    }
+                } else if (error.response.status === 500) {
+                    errorMessage = 'Server error occurred. Please try again later.'
+                } else {
+                    errorMessage = `Server error: ${error.response.status} - ${error.response.statusText}`
+                }
+            } else if (error.request) {
+                errorMessage = 'Network error: Unable to connect to server. Please check your internet connection.'
+            } else {
+                errorMessage = `Error: ${error.message}`
+            }
+            
+            alert(errorMessage)
         }
     }
 
@@ -252,14 +507,12 @@ export default function HospitalStaffDashboard() {
     const handlePreparationUpdate = async (e) => {
         e.preventDefault()
         try {
-            await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`, 
-                {
-                    ...preparationData,
-                    hospital_id: currentHospital.id
-                }
+            // Update preparation status in database using your Django API
+            const response = await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`, 
+                preparationData
             )
 
-            // Refresh communications
+            // Refresh communications from database
             await fetchHospitalCommunications()
             setShowPreparationModal(false)
             setSelectedCommunication(null)
@@ -296,8 +549,12 @@ export default function HospitalStaffDashboard() {
                 return "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
             case "resolved":
                 return "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
+            case "pending":
+                return "bg-blue-100 text-blue-800 border-blue-200"
             case "sent":
                 return "bg-blue-100 text-blue-800 border-blue-200"
+            case "delivered":
+                return "bg-green-100 text-green-800 border-green-200"
             case "acknowledged":
                 return "bg-yellow-100 text-yellow-800 border-yellow-200"
             case "preparing":
@@ -308,6 +565,12 @@ export default function HospitalStaffDashboard() {
                 return "bg-purple-100 text-purple-800 border-purple-200"
             case "arrived":
                 return "bg-indigo-100 text-indigo-800 border-indigo-200"
+            case "completed":
+                return "bg-gray-100 text-gray-800 border-gray-200"
+            case "cancelled":
+                return "bg-red-100 text-red-800 border-red-200"
+            case "failed":
+                return "bg-red-100 text-red-800 border-red-200"
             default:
                 return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
         }
@@ -327,6 +590,52 @@ export default function HospitalStaffDashboard() {
         }
     }
 
+    // Format vital signs for display
+    const formatVitalSigns = (vitalSigns) => {
+        if (!vitalSigns) return 'N/A'
+        
+        if (typeof vitalSigns === 'string') {
+            return vitalSigns
+        }
+        
+        if (typeof vitalSigns === 'object') {
+            const parts = []
+            if (vitalSigns.heartRate) parts.push(`HR: ${vitalSigns.heartRate}bpm`)
+            if (vitalSigns.bloodPressure) parts.push(`BP: ${vitalSigns.bloodPressure}`)
+            if (vitalSigns.temperature) parts.push(`Temp: ${vitalSigns.temperature}°C`)
+            if (vitalSigns.respiratoryRate) parts.push(`RR: ${vitalSigns.respiratoryRate}`)
+            if (vitalSigns.oxygenSaturation) parts.push(`SpO2: ${vitalSigns.oxygenSaturation}%`)
+            return parts.join(', ') || 'Vitals recorded'
+        }
+        
+        return 'N/A'
+    }
+
+    // Filter communications to exclude failed and cancelled ones for display
+    const getDisplayCommunications = () => {
+        return hospitalCommunications.filter(comm => 
+            !['failed', 'cancelled', 'completed'].includes(comm.status)
+        )
+    }
+
+    // Get status display text
+    const getStatusDisplay = (status) => {
+        const statusMap = {
+            'pending': 'Pending',
+            'sent': 'Sent to Hospital',
+            'delivered': 'Delivered',
+            'acknowledged': 'Acknowledged',
+            'preparing': 'Hospital Preparing',
+            'ready': 'Hospital Ready',
+            'en_route': 'Patient En Route',
+            'arrived': 'Patient Arrived',
+            'completed': 'Completed',
+            'cancelled': 'Cancelled',
+            'failed': 'Failed'
+        }
+        return statusMap[status] || status
+    }
+
     if (isLoading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
@@ -343,6 +652,8 @@ export default function HospitalStaffDashboard() {
         )
     }
 
+    const displayCommunications = getDisplayCommunications()
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
             <Sidebar />
@@ -350,8 +661,8 @@ export default function HospitalStaffDashboard() {
             <main className="ml-64 px-4 sm:px-6 lg:px-8 py-8">
                 {/* Page Title */}
                 <div className="mb-8">
-                    <h1 className="text-4xl font-bold text-[#1a0000] mb-2">Hospital Staff Dashboard</h1>
-                    <p className="text-[#740000]">
+                    <h1 className="text-3xl sm:text-4xl font-bold text-[#1a0000] mb-2">Hospital Staff Dashboard</h1>
+                    <p className="text-[#740000] text-sm sm:text-base">
                         {currentHospital ? `Managing communications for ${currentHospital.name}` : 'Loading hospital information...'}
                     </p>
                 </div>
@@ -360,145 +671,176 @@ export default function HospitalStaffDashboard() {
                 <HospitalInfo />
 
                 {/* Stats Grid */}
-                <div className="grid md:grid-cols-4 gap-4 mb-8">
-                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-6">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-4 sm:p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-[#740000] mb-1">Active Patients</p>
-                                <p className="text-3xl font-bold text-[#1a0000]">{stats.activePatients}</p>
+                                <p className="text-xs sm:text-sm text-[#740000] mb-1">Active Patients</p>
+                                <p className="text-2xl sm:text-3xl font-bold text-[#1a0000]">{stats.activePatients}</p>
                             </div>
-                            <Users className="w-12 h-12 text-[#b90000]/20" />
+                            <Users className="w-8 h-8 sm:w-12 sm:h-12 text-[#b90000]/20" />
                         </div>
                     </div>
-                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-6">
+                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-4 sm:p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-[#740000] mb-1">Critical Cases</p>
-                                <p className="text-3xl font-bold text-[#b90000]">{stats.criticalCases}</p>
+                                <p className="text-xs sm:text-sm text-[#740000] mb-1">Critical Cases</p>
+                                <p className="text-2xl sm:text-3xl font-bold text-[#b90000]">{stats.criticalCases}</p>
                             </div>
-                            <AlertCircle className="w-12 h-12 text-[#b90000]/20" />
+                            <AlertCircle className="w-8 h-8 sm:w-12 sm:h-12 text-[#b90000]/20" />
                         </div>
                     </div>
-                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-6">
+                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-4 sm:p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-[#740000] mb-1">Pending Comms</p>
-                                <p className="text-3xl font-bold text-[#1a0000]">{stats.pendingCommunications}</p>
+                                <p className="text-xs sm:text-sm text-[#740000] mb-1">Pending Comms</p>
+                                <p className="text-2xl sm:text-3xl font-bold text-[#1a0000]">{stats.pendingCommunications}</p>
                             </div>
-                            <MessageCircle className="w-12 h-12 text-[#740000]/20" />
+                            <MessageCircle className="w-8 h-8 sm:w-12 sm:h-12 text-[#740000]/20" />
                         </div>
                     </div>
-                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-6">
+                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-4 sm:p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm text-[#740000] mb-1">Active Incidents</p>
-                                <p className="text-3xl font-bold text-[#1a0000]">{stats.activeIncidents}</p>
+                                <p className="text-xs sm:text-sm text-[#740000] mb-1">Active Incidents</p>
+                                <p className="text-2xl sm:text-3xl font-bold text-[#1a0000]">{stats.activeIncidents}</p>
                             </div>
-                            <Activity className="w-12 h-12 text-[#b90000]/20" />
+                            <Activity className="w-8 h-8 sm:w-12 sm:h-12 text-[#b90000]/20" />
                         </div>
                     </div>
                 </div>
 
                 {/* Main Content Grid */}
-                <div className="grid lg:grid-cols-3 gap-8">
+                <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
                     {/* Hospital Communications Section */}
                     <div className="lg:col-span-2 space-y-6">
                         <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
-                            <div className="flex flex-row items-center justify-between p-6 border-b border-[#ffe6c5]">
-                                <div>
-                                    <h3 className="text-2xl font-bold text-[#1a0000]">Emergency Communications</h3>
-                                    <p className="text-[#740000]">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-6 border-b border-[#ffe6c5]">
+                                <div className="mb-4 sm:mb-0">
+                                    <h3 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Emergency Communications</h3>
+                                    <p className="text-[#740000] text-sm sm:text-base">
                                         {currentHospital 
                                             ? `Incoming emergency alerts for ${currentHospital.name}`
                                             : 'Loading hospital communications...'
                                         }
                                     </p>
+                                    <p className="text-xs text-[#740000] mt-1">
+                                        Showing {displayCommunications.length} active communications
+                                        {hospitalCommunications.length > displayCommunications.length && 
+                                            ` (${hospitalCommunications.length - displayCommunications.length} failed/cancelled)`
+                                        }
+                                    </p>
                                 </div>
+                                <button
+                                    onClick={refreshCommunications}
+                                    disabled={isRefreshing}
+                                    className="px-4 py-2 bg-[#b90000] hover:bg-[#740000] disabled:bg-[#740000]/50 text-[#fff3ea] rounded-lg font-medium text-sm transition-colors flex items-center gap-2 self-start sm:self-auto"
+                                >
+                                    <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                                </button>
                             </div>
-                            <div className="p-6">
+                            <div className="p-4 sm:p-6">
                                 <div className="space-y-4">
-                                    {hospitalCommunications.length === 0 ? (
+                                    {displayCommunications.length === 0 ? (
                                         <div className="text-center py-8">
                                             <MessageCircle className="w-12 h-12 text-[#740000]/50 mx-auto mb-4" />
                                             <p className="text-[#740000]">
                                                 {currentHospital 
-                                                    ? `No pending communications for ${currentHospital.name}`
+                                                    ? `No active communications for ${currentHospital.name}`
                                                     : 'Loading communications...'
+                                                }
+                                            </p>
+                                            <p className="text-[#740000] text-sm mt-2">
+                                                {hospitalCommunications.length > 0 
+                                                    ? `${hospitalCommunications.length} communications are in failed or cancelled state.`
+                                                    : 'Communications from first aiders will appear here when they send alerts to your hospital.'
                                                 }
                                             </p>
                                         </div>
                                     ) : (
-                                        hospitalCommunications.map((communication) => (
+                                        displayCommunications.map((communication) => (
                                             <div
                                                 key={communication.id}
                                                 className="border border-[#ffe6c5] rounded-lg p-4 hover:border-[#b90000] transition"
                                             >
-                                                <div className="flex items-start justify-between mb-3">
+                                                <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3 gap-3">
                                                     <div className="flex items-start gap-3 flex-1">
-                                                        <MessageCircle className="w-5 h-5 text-[#b90000] mt-1" />
-                                                        <div className="flex-1">
-                                                            <h3 className="font-semibold text-[#1a0000]">
+                                                        <MessageCircle className="w-5 h-5 text-[#b90000] mt-1 flex-shrink-0" />
+                                                        <div className="flex-1 min-w-0">
+                                                            <h3 className="font-semibold text-[#1a0000] break-words">
                                                                 {communication.victim_name || "Unknown Victim"}
                                                             </h3>
-                                                            <div className="flex items-center gap-2 text-sm text-[#740000] mt-1">
-                                                                <Building className="w-4 h-4" />
-                                                                <span>From: {communication.first_aider_name}</span>
+                                                            <div className="flex items-center gap-2 text-sm text-[#740000] mt-1 flex-wrap">
+                                                                <Building className="w-4 h-4 flex-shrink-0" />
+                                                                <span className="break-words">From: {communication.first_aider_name}</span>
                                                             </div>
                                                             <div className="text-xs text-[#b90000] mt-1 bg-[#b90000]/10 px-2 py-1 rounded inline-block">
-                                                                Hospital: {communication.hospital_name}
+                                                                Alert ID: {communication.alert_reference_id || communication.emergency_alert_id}
                                                             </div>
-                                                            <p className="text-sm text-[#740000] mt-1">
-                                                                <strong>Chief Complaint:</strong> {communication.chief_complaint}
+                                                            <p className="text-sm text-[#740000] mt-1 break-words">
+                                                                <strong>Chief Complaint:</strong> {communication.chief_complaint || "Emergency condition"}
                                                             </p>
-                                                            {communication.vital_signs && (
-                                                                <p className="text-sm text-[#740000]">
-                                                                    <strong>Vitals:</strong> {communication.vital_signs}
+                                                            <p className="text-sm text-[#740000] break-words">
+                                                                <strong>Vitals:</strong> {formatVitalSigns(communication.vital_signs)}
+                                                            </p>
+                                                            {communication.initial_assessment && (
+                                                                <p className="text-sm text-[#740000] break-words mt-1">
+                                                                    <strong>Assessment:</strong> {communication.initial_assessment}
                                                                 </p>
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="flex flex-col items-end gap-2">
+                                                    <div className="flex flex-col items-start sm:items-end gap-2 self-stretch">
                                                         <span
-                                                            className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(communication.priority)}`}
+                                                            className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(communication.priority)} whitespace-nowrap`}
                                                         >
-                                                            {communication.priority}
+                                                            {communication.priority?.toUpperCase() || 'HIGH'}
                                                         </span>
                                                         <span
-                                                            className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(communication.status)}`}
+                                                            className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(communication.status)} whitespace-nowrap`}
                                                         >
-                                                            {communication.status}
+                                                            {getStatusDisplay(communication.status)}
                                                         </span>
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-4 text-sm text-[#740000] mb-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm text-[#740000] mb-3">
                                                     <div>
-                                                        <strong>Estimated Arrival:</strong> {communication.estimated_arrival_minutes} mins
+                                                        <strong>Estimated Arrival:</strong> {communication.estimated_arrival_minutes || 15} mins
                                                     </div>
                                                     <div>
                                                         <strong>Age/Gender:</strong> {communication.victim_age || 'N/A'} / {communication.victim_gender || 'N/A'}
                                                     </div>
-                                                    {communication.required_specialties && (
-                                                        <div>
-                                                            <strong>Specialties Needed:</strong> {communication.required_specialties}
+                                                    {communication.required_specialties && communication.required_specialties.length > 0 && (
+                                                        <div className="sm:col-span-2">
+                                                            <strong>Specialties Needed:</strong> {Array.isArray(communication.required_specialties) ? communication.required_specialties.join(', ') : communication.required_specialties}
                                                         </div>
                                                     )}
-                                                    {communication.equipment_needed && (
-                                                        <div>
-                                                            <strong>Equipment:</strong> {communication.equipment_needed}
+                                                    {communication.equipment_needed && communication.equipment_needed.length > 0 && (
+                                                        <div className="sm:col-span-2">
+                                                            <strong>Equipment:</strong> {Array.isArray(communication.equipment_needed) ? communication.equipment_needed.join(', ') : communication.equipment_needed}
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                <div className="flex items-center justify-between text-sm pt-3 border-t border-[#ffe6c5]">
-                                                    <div className="text-[#740000]">
+                                                {communication.first_aid_provided && (
+                                                    <div className="mb-3">
+                                                        <p className="text-sm text-[#740000] break-words">
+                                                            <strong>First Aid Provided:</strong> {communication.first_aid_provided}
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-sm pt-3 border-t border-[#ffe6c5] gap-2">
+                                                    <div className="text-[#740000] text-xs sm:text-sm">
                                                         Received: {new Date(communication.created_at).toLocaleString()}
                                                     </div>
-                                                    <div className="flex gap-2">
-                                                        {communication.status === 'sent' && (
+                                                    <div className="flex gap-2 flex-wrap">
+                                                        {(communication.status === 'sent' || communication.status === 'delivered') && (
                                                             <button 
                                                                 onClick={() => handleOpenAcknowledge(communication)}
-                                                                className="px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors"
+                                                                className="px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-[#fff3ea] rounded text-sm font-medium transition-colors whitespace-nowrap"
                                                             >
                                                                 Acknowledge
                                                             </button>
@@ -506,14 +848,24 @@ export default function HospitalStaffDashboard() {
                                                         {(communication.status === 'acknowledged' || communication.status === 'preparing') && (
                                                             <button 
                                                                 onClick={() => handleOpenPreparation(communication)}
-                                                                className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"
+                                                                className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors whitespace-nowrap"
                                                             >
                                                                 Update Preparation
                                                             </button>
                                                         )}
                                                         {communication.status === 'ready' && (
-                                                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">
+                                                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-medium whitespace-nowrap">
                                                                 Ready for Arrival
+                                                            </span>
+                                                        )}
+                                                        {communication.status === 'en_route' && (
+                                                            <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded text-sm font-medium whitespace-nowrap">
+                                                                Patient En Route
+                                                            </span>
+                                                        )}
+                                                        {communication.status === 'arrived' && (
+                                                            <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded text-sm font-medium whitespace-nowrap">
+                                                                Patient Arrived
                                                             </span>
                                                         )}
                                                     </div>
@@ -530,54 +882,61 @@ export default function HospitalStaffDashboard() {
                     <div className="space-y-6">
                         {/* Patients Section */}
                         <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
-                            <div className="p-6 border-b border-[#ffe6c5]">
-                                <h3 className="text-2xl font-bold text-[#1a0000]">Current Patients</h3>
-                                <p className="text-[#740000]">Patients currently admitted to the hospital</p>
+                            <div className="p-4 sm:p-6 border-b border-[#ffe6c5]">
+                                <h3 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Current Patients</h3>
+                                <p className="text-[#740000] text-sm sm:text-base">Patients currently admitted to the hospital</p>
                             </div>
-                            <div className="p-6">
+                            <div className="p-4 sm:p-6">
                                 <div className="space-y-4">
-                                    {patients.map((patient) => (
-                                        <div
-                                            key={patient.id}
-                                            className="border border-[#ffe6c5] rounded-lg p-4 hover:border-[#b90000] transition"
-                                        >
-                                            <div className="flex items-start justify-between mb-3">
-                                                <div>
-                                                    <h3 className="font-semibold text-[#1a0000]">{patient.name}</h3>
-                                                    <p className="text-sm text-[#740000]">{patient.age} years old</p>
-                                                </div>
-                                                <span
-                                                    className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(patient.status)}`}
-                                                >
-                                                    {patient.status.charAt(0).toUpperCase() + patient.status.slice(1)}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-[#740000]">Condition: {patient.condition}</span>
-                                                <span className="text-[#740000]">Admitted {patient.admittedAt}</span>
-                                            </div>
+                                    {patients.length === 0 ? (
+                                        <div className="text-center py-4">
+                                            <Users className="w-8 h-8 text-[#740000]/50 mx-auto mb-2" />
+                                            <p className="text-[#740000] text-sm">No patients currently admitted</p>
                                         </div>
-                                    ))}
+                                    ) : (
+                                        patients.map((patient) => (
+                                            <div
+                                                key={patient.id}
+                                                className="border border-[#ffe6c5] rounded-lg p-4 hover:border-[#b90000] transition"
+                                            >
+                                                <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3 gap-2">
+                                                    <div className="flex-1">
+                                                        <h3 className="font-semibold text-[#1a0000] break-words">{patient.name}</h3>
+                                                        <p className="text-sm text-[#740000]">{patient.age} years old</p>
+                                                    </div>
+                                                    <span
+                                                        className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(patient.status)} whitespace-nowrap self-start`}
+                                                    >
+                                                        {patient.status.charAt(0).toUpperCase() + patient.status.slice(1)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-sm gap-1">
+                                                    <span className="text-[#740000] break-words">Condition: {patient.condition}</span>
+                                                    <span className="text-[#740000] whitespace-nowrap">Admitted {patient.admittedAt}</span>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* Quick Actions */}
                         <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
-                            <div className="p-6 border-b border-[#ffe6c5]">
-                                <h3 className="text-xl font-bold text-[#1a0000]">Quick Actions</h3>
+                            <div className="p-4 sm:p-6 border-b border-[#ffe6c5]">
+                                <h3 className="text-lg sm:text-xl font-bold text-[#1a0000]">Quick Actions</h3>
                             </div>
-                            <div className="p-6 space-y-2">
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center">
-                                    <Phone className="w-4 h-4 mr-2" />
+                            <div className="p-4 sm:p-6 space-y-2">
+                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
+                                    <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
                                     Call First-Aider
                                 </button>
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center">
-                                    <AlertCircle className="w-4 h-4 mr-2" />
+                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
+                                    <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
                                     Report Emergency
                                 </button>
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center">
-                                    <Users className="w-4 h-4 mr-2" />
+                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
+                                    <Users className="w-4 h-4 mr-2 flex-shrink-0" />
                                     View Team
                                 </button>
                             </div>
@@ -586,16 +945,21 @@ export default function HospitalStaffDashboard() {
                         {/* Hospital Info */}
                         {currentHospital && (
                             <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
-                                <div className="p-6 border-b border-[#ffe6c5]">
-                                    <h3 className="text-xl font-bold text-[#1a0000]">Hospital Information</h3>
+                                <div className="p-4 sm:p-6 border-b border-[#ffe6c5]">
+                                    <h3 className="text-lg sm:text-xl font-bold text-[#1a0000]">Hospital Information</h3>
                                 </div>
-                                <div className="p-6 space-y-2">
-                                    <p className="text-[#1a0000] font-medium">{currentHospital.name}</p>
-                                    <p className="text-sm text-[#740000]">{currentHospital.location || 'Location not specified'}</p>
+                                <div className="p-4 sm:p-6 space-y-2">
+                                    <p className="text-[#1a0000] font-medium break-words">{currentHospital.name}</p>
+                                    <p className="text-sm text-[#740000] break-words">{currentHospital.location || 'Location not specified'}</p>
                                     <p className="text-sm text-[#740000]">Emergency: +254 700 123 456</p>
                                     {currentHospital.phone && (
-                                        <p className="text-sm text-[#740000]">Phone: {currentHospital.phone}</p>
+                                        <p className="text-sm text-[#740000] break-words">Phone: {currentHospital.phone}</p>
                                     )}
+                                    <div className="pt-2">
+                                        <p className="text-xs text-[#740000]">Hospital ID: {currentHospital.id}</p>
+                                        <p className="text-xs text-[#740000]">Total Communications: {hospitalCommunications.length}</p>
+                                        <p className="text-xs text-[#740000]">Active Communications: {displayCommunications.length}</p>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -603,12 +967,12 @@ export default function HospitalStaffDashboard() {
                 </div>
             </main>
 
-            {/* Acknowledge Modal */}
+            {/* Acknowledge Modal - Scrollable and Responsive */}
             {showAcknowledgeModal && selectedCommunication && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
-                        <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
-                            <h2 className="text-2xl font-bold text-[#1a0000]">Acknowledge Emergency</h2>
+                    <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#ffe6c5] flex-shrink-0">
+                            <h2 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Acknowledge Emergency</h2>
                             <button
                                 onClick={() => setShowAcknowledgeModal(false)}
                                 className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
@@ -616,17 +980,23 @@ export default function HospitalStaffDashboard() {
                                 <X className="w-5 h-5 text-[#1a0000]" />
                             </button>
                         </div>
-                        <form onSubmit={handleAcknowledge} className="p-6 space-y-4">
+                        <form onSubmit={handleAcknowledge} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
                             <div className="bg-[#ffe6c5] p-4 rounded-lg">
-                                <h3 className="font-semibold text-[#1a0000] mb-2">{selectedCommunication.victim_name}</h3>
-                                <p className="text-sm text-[#740000]">
+                                <h3 className="font-semibold text-[#1a0000] mb-2 break-words">{selectedCommunication.victim_name}</h3>
+                                <p className="text-sm text-[#740000] break-words">
                                     <strong>Condition:</strong> {selectedCommunication.chief_complaint}
+                                </p>
+                                <p className="text-sm text-[#740000]">
+                                    <strong>First Aider:</strong> {selectedCommunication.first_aider_name}
                                 </p>
                                 <p className="text-sm text-[#740000]">
                                     <strong>ETA:</strong> {selectedCommunication.estimated_arrival_minutes} minutes
                                 </p>
                                 <p className="text-sm text-[#740000]">
                                     <strong>Priority:</strong> {selectedCommunication.priority}
+                                </p>
+                                <p className="text-sm text-[#740000]">
+                                    <strong>Alert ID:</strong> {selectedCommunication.alert_reference_id || selectedCommunication.emergency_alert_id}
                                 </p>
                             </div>
 
@@ -638,13 +1008,13 @@ export default function HospitalStaffDashboard() {
                                     name="preparation_notes"
                                     value={acknowledgeData.preparation_notes}
                                     onChange={handleAcknowledgeInputChange}
-                                    rows={3}
+                                    rows={4}
                                     placeholder="Enter any preparation notes or instructions..."
-                                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical min-h-[100px]"
                                 />
                             </div>
 
-                            <div className="flex gap-4 pt-4">
+                            <div className="flex gap-3 pt-4 flex-col sm:flex-row">
                                 <button
                                     type="button"
                                     onClick={() => setShowAcknowledgeModal(false)}
@@ -664,12 +1034,12 @@ export default function HospitalStaffDashboard() {
                 </div>
             )}
 
-            {/* Preparation Update Modal */}
+            {/* Preparation Update Modal - Scrollable and Responsive */}
             {showPreparationModal && selectedCommunication && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md">
-                        <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5]">
-                            <h2 className="text-2xl font-bold text-[#1a0000]">Update Preparation Status</h2>
+                    <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#ffe6c5] flex-shrink-0">
+                            <h2 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Update Preparation Status</h2>
                             <button
                                 onClick={() => setShowPreparationModal(false)}
                                 className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
@@ -677,71 +1047,77 @@ export default function HospitalStaffDashboard() {
                                 <X className="w-5 h-5 text-[#1a0000]" />
                             </button>
                         </div>
-                        <form onSubmit={handlePreparationUpdate} className="p-6 space-y-4">
+                        <form onSubmit={handlePreparationUpdate} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
                             <div className="bg-[#ffe6c5] p-4 rounded-lg">
-                                <h3 className="font-semibold text-[#1a0000] mb-2">{selectedCommunication.victim_name}</h3>
-                                <p className="text-sm text-[#740000]">
+                                <h3 className="font-semibold text-[#1a0000] mb-2 break-words">{selectedCommunication.victim_name}</h3>
+                                <p className="text-sm text-[#740000] break-words">
                                     <strong>Condition:</strong> {selectedCommunication.chief_complaint}
                                 </p>
                                 <p className="text-sm text-[#740000]">
+                                    <strong>First Aider:</strong> {selectedCommunication.first_aider_name}
+                                </p>
+                                <p className="text-sm text-[#740000]">
                                     <strong>ETA:</strong> {selectedCommunication.estimated_arrival_minutes} minutes
+                                </p>
+                                <p className="text-sm text-[#740000]">
+                                    <strong>Alert ID:</strong> {selectedCommunication.alert_reference_id || selectedCommunication.emergency_alert_id}
                                 </p>
                             </div>
 
                             <div className="space-y-3">
                                 <h4 className="font-medium text-[#1a0000]">Preparation Checklist</h4>
                                 
-                                <label className="flex items-center space-x-2">
+                                <label className="flex items-center space-x-3 p-2 hover:bg-[#ffe6c5] rounded transition-colors">
                                     <input
                                         type="checkbox"
                                         name="doctors_ready"
                                         checked={preparationData.doctors_ready}
                                         onChange={handlePreparationInputChange}
-                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000] w-4 h-4"
                                     />
                                     <span className="text-sm text-[#1a0000]">Doctors Ready</span>
                                 </label>
 
-                                <label className="flex items-center space-x-2">
+                                <label className="flex items-center space-x-3 p-2 hover:bg-[#ffe6c5] rounded transition-colors">
                                     <input
                                         type="checkbox"
                                         name="nurses_ready"
                                         checked={preparationData.nurses_ready}
                                         onChange={handlePreparationInputChange}
-                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000] w-4 h-4"
                                     />
                                     <span className="text-sm text-[#1a0000]">Nurses Ready</span>
                                 </label>
 
-                                <label className="flex items-center space-x-2">
+                                <label className="flex items-center space-x-3 p-2 hover:bg-[#ffe6c5] rounded transition-colors">
                                     <input
                                         type="checkbox"
                                         name="equipment_ready"
                                         checked={preparationData.equipment_ready}
                                         onChange={handlePreparationInputChange}
-                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000] w-4 h-4"
                                     />
                                     <span className="text-sm text-[#1a0000]">Equipment Ready</span>
                                 </label>
 
-                                <label className="flex items-center space-x-2">
+                                <label className="flex items-center space-x-3 p-2 hover:bg-[#ffe6c5] rounded transition-colors">
                                     <input
                                         type="checkbox"
                                         name="bed_ready"
                                         checked={preparationData.bed_ready}
                                         onChange={handlePreparationInputChange}
-                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000] w-4 h-4"
                                     />
                                     <span className="text-sm text-[#1a0000]">Bed Available</span>
                                 </label>
 
-                                <label className="flex items-center space-x-2">
+                                <label className="flex items-center space-x-3 p-2 hover:bg-[#ffe6c5] rounded transition-colors">
                                     <input
                                         type="checkbox"
                                         name="blood_available"
                                         checked={preparationData.blood_available}
                                         onChange={handlePreparationInputChange}
-                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000]"
+                                        className="rounded border-[#ffe6c5] text-[#b90000] focus:ring-[#b90000] w-4 h-4"
                                     />
                                     <span className="text-sm text-[#1a0000]">Blood Available</span>
                                 </label>
@@ -755,13 +1131,13 @@ export default function HospitalStaffDashboard() {
                                     name="hospital_preparation_notes"
                                     value={preparationData.hospital_preparation_notes}
                                     onChange={handlePreparationInputChange}
-                                    rows={3}
+                                    rows={4}
                                     placeholder="Any additional preparation notes..."
-                                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical"
+                                    className="w-full px-3 py-2 bg-[#fff3ea] border border-[#ffe6c5] rounded-md text-[#1a0000] placeholder:text-[#740000] focus:outline-none focus:ring-2 focus:ring-[#b90000] focus:border-transparent resize-vertical min-h-[100px]"
                                 />
                             </div>
 
-                            <div className="flex gap-4 pt-4">
+                            <div className="flex gap-3 pt-4 flex-col sm:flex-row">
                                 <button
                                     type="button"
                                     onClick={() => setShowPreparationModal(false)}
