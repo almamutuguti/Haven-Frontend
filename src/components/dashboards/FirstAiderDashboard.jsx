@@ -139,10 +139,11 @@ export default function FirstAiderDashboard() {
 
     // Status Options
     const statusOptions = [
-        { value: "pending", label: "Pending" },
-        { value: "in_progress", label: "In Progress" },
+        { value: "dispatched", label: "Dispatched" },
+        { value: "en_route", label: "En Route to Hospital" },
+        { value: "arrived", label: "Arrived at Hospital" },
         { value: "completed", label: "Completed" },
-        { value: "cancelled", label: "Cancelled" }
+
     ]
 
     // Communication Status Options
@@ -154,7 +155,6 @@ export default function FirstAiderDashboard() {
         { value: "ready", label: "Ready" },
         { value: "en_route", label: "En Route" },
         { value: "arrived", label: "Arrived" },
-        { value: "completed", label: "Completed" },
         { value: "cancelled", label: "Cancelled" }
     ]
 
@@ -875,19 +875,16 @@ export default function FirstAiderDashboard() {
     }
 
     const mapStatus = (apiStatus) => {
-        if (!apiStatus) return 'pending'
+        if (!apiStatus) return 'dispatched'
 
         const statusMap = {
-            'pending': 'pending',
-            'verified': 'in-progress',
-            'dispatched': 'in-progress',
-            'hospital_selected': 'in-progress',
-            'en_route': 'in-progress',
+            'dispatched': 'dispatched',
+            'en_route': 'en-route',
             'arrived': 'completed',
-            'completed': 'completed',
-            'cancelled': 'cancelled'
+            'completed': 'completed'
+
         }
-        return statusMap[apiStatus] || 'pending'
+        return statusMap[apiStatus] || 'dispatched'
     }
 
     const calculateDistance = (lat, lng) => {
@@ -919,35 +916,6 @@ export default function FirstAiderDashboard() {
         return baseVitals[emergencyType] || baseVitals.medical
     }
 
-    // Accept assignment
-    const handleAcceptAssignment = async (assignmentId) => {
-        try {
-            setAssignments(prev => prev.map(assignment =>
-                assignment.id === assignmentId
-                    ? { ...assignment, status: 'in-progress' }
-                    : assignment
-            ))
-
-        } catch (error) {
-            console.error('Failed to accept assignment:', error)
-        }
-    }
-
-    // Cancel emergency alert
-    const handleCancelEmergency = async (assignmentId) => {
-        try {
-            const response = await apiClient.post(`/emergencies/${assignmentId}/cancel/`, {
-                reason: "Cancelled by first aider"
-            })
-
-            setAssignments(prev => prev.filter(assignment => assignment.id !== assignmentId))
-            setFormSuccess("Emergency alert cancelled successfully")
-
-        } catch (error) {
-            console.error('Failed to cancel emergency:', error)
-            setFormError("Failed to cancel emergency alert")
-        }
-    }
 
     // Open status update form
     const handleOpenStatusUpdate = (assignment) => {
@@ -961,8 +929,7 @@ export default function FirstAiderDashboard() {
         })
         setShowStatusUpdateForm(true)
     }
-
-    // Submit status update
+    // Update the handleStatusUpdate function with this corrected version
     const handleStatusUpdate = async (e) => {
         e.preventDefault()
         setIsSubmitting(true)
@@ -970,49 +937,234 @@ export default function FirstAiderDashboard() {
         setFormSuccess("")
 
         try {
-            let locationData = {
-                latitude: statusUpdateData.latitude,
-                longitude: statusUpdateData.longitude
+            console.log('Starting status update for assignment:', selectedAssignment.id)
+
+            // Prepare the update data
+            const updateData = {
+                status: statusUpdateData.status,
+                details: statusUpdateData.details || `Status updated to ${statusUpdateData.status}`
             }
 
-            // Process location if address is provided
-            if (statusUpdateData.address && !statusUpdateData.latitude) {
-                const processedLocation = await processLocationInput(statusUpdateData.address)
-                locationData = {
-                    latitude: processedLocation.latitude,
-                    longitude: processedLocation.longitude
+            // Add location data if available
+            if (statusUpdateData.address || (statusUpdateData.latitude && statusUpdateData.longitude)) {
+                let locationData = {}
+
+                if (statusUpdateData.latitude && statusUpdateData.longitude) {
+                    // Use provided coordinates
+                    locationData = {
+                        latitude: parseFloat(statusUpdateData.latitude),
+                        longitude: parseFloat(statusUpdateData.longitude),
+                        address: statusUpdateData.address || selectedAssignment.location
+                    }
+                } else if (statusUpdateData.address) {
+                    // Process address to get coordinates
+                    try {
+                        const processedLocation = await processLocationInput(statusUpdateData.address)
+                        locationData = {
+                            latitude: processedLocation.latitude,
+                            longitude: processedLocation.longitude,
+                            address: processedLocation.formatted_address
+                        }
+                    } catch (locationError) {
+                        console.warn('Location processing failed, continuing without location update:', locationError)
+                        // Continue without location update if geocoding fails
+                    }
+                }
+
+                // Update location if we have valid data
+                if (locationData.latitude && locationData.longitude) {
+                    try {
+                        await apiClient.put(`/emergencies/${selectedAssignment.id}/location/`, {
+                            latitude: locationData.latitude,
+                            longitude: locationData.longitude,
+                            address: locationData.address
+                        })
+                        console.log('Location updated successfully')
+                    } catch (locationError) {
+                        console.warn('Location update failed, continuing with status update:', locationError)
+                        // Continue with status update even if location update fails
+                    }
                 }
             }
 
-            // Update location first
-            await apiClient.put(`/emergencies/${selectedAssignment.id}/location/`, {
-                latitude: locationData.latitude,
-                longitude: locationData.longitude,
-                address: statusUpdateData.address
-            })
+            // Update status using the AlertStatusAPIView endpoint
+            console.log('Updating alert status with data:', updateData)
+            const response = await apiClient.post(`/emergencies/${selectedAssignment.id}/status/`, updateData)
 
-            // Update status using the correct endpoint
-            await apiClient.post(`/emergencies/${selectedAssignment.id}/status/`, {
-                status: statusUpdateData.status,
-                details: statusUpdateData.details
-            })
+            console.log('Status update response:', response)
 
-            setFormSuccess("Status updated successfully!")
+            // Update local state immediately for better UX
+            setAssignments(prev => prev.map(assignment =>
+                assignment.id === selectedAssignment.id
+                    ? {
+                        ...assignment,
+                        status: mapStatusToUI(statusUpdateData.status),
+                        location: statusUpdateData.address || assignment.location
+                    }
+                    : assignment
+            ))
 
-            fetchActiveEmergencies()
+            setFormSuccess(`Status updated to ${statusUpdateData.status.replace('_', ' ')} successfully!`)
 
+            // Refresh data after a short delay
+            setTimeout(() => {
+                fetchActiveEmergencies()
+            }, 1000)
+
+            // Close form after success
             setTimeout(() => {
                 setShowStatusUpdateForm(false)
                 setSelectedAssignment(null)
+                setStatusUpdateData({
+                    address: "",
+                    status: "in_progress",
+                    details: "",
+                    latitude: "",
+                    longitude: ""
+                })
             }, 2000)
 
         } catch (error) {
             console.error('Status update failed:', error)
-            setFormError(error.message || "Failed to update status")
+
+            // Enhanced error handling
+            if (error.response) {
+                if (error.response.status === 404) {
+                    setFormError("Emergency alert not found. It may have been cancelled or completed.")
+                } else if (error.response.status === 403) {
+                    setFormError("You don't have permission to update this alert status.")
+                } else if (error.response.status === 400) {
+                    const errorData = error.response.data
+                    if (typeof errorData === 'object') {
+                        const errorMessages = Object.entries(errorData).map(([field, messages]) =>
+                            `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`
+                        )
+                        setFormError(`Validation error: ${errorMessages.join('; ')}`)
+                    } else {
+                        setFormError(`Error: ${errorData}`)
+                    }
+                } else {
+                    setFormError(`Server error: ${error.response.status} - ${error.response.data?.detail || error.response.statusText}`)
+                }
+            } else if (error.request) {
+                setFormError("Network error: Unable to connect to server. Please check your internet connection.")
+            } else {
+                setFormError(error.message || "Failed to update alert status. Please try again.")
+            }
         } finally {
             setIsSubmitting(false)
         }
     }
+
+    // Add this helper function to map API status to UI status
+    const mapStatusToUI = (apiStatus) => {
+        const statusMap = {
+            'dispatched': 'dispatched',
+            'en_route': 'en-route',
+            'arrived': 'arrived',
+            'completed': 'completed',
+
+        }
+        return statusMap[apiStatus] || 'dispatched'
+    }
+
+
+
+    const handleAcceptAssignment = async (assignmentId) => {
+        try {
+            setIsSubmitting(true)
+            console.log('Accepting assignment:', assignmentId)
+
+            // Use the correct status value - 'dispatched' is likely what you want
+            const response = await apiClient.post(`/emergencies/${assignmentId}/status/`, {
+                status: 'dispatched',  // Changed to match backend
+                details: 'First aider has accepted the assignment'
+            })
+
+            console.log('Accept assignment response:', response)
+
+            // Update local state
+            setAssignments(prev => prev.map(assignment =>
+                assignment.id === assignmentId
+                    ? { ...assignment, status: 'dispatched' } // Keep UI status as is
+                    : assignment
+            ))
+
+            setFormSuccess("Assignment accepted successfully!")
+
+            // Refresh data
+            setTimeout(() => {
+                fetchActiveEmergencies()
+            }, 1000)
+
+        } catch (error) {
+            console.error('Failed to accept assignment:', error)
+
+            if (error.response) {
+                console.error('Error response data:', error.response.data)
+                console.error('Error response status:', error.response.status)
+
+                if (error.response.data && error.response.data.status) {
+                    setFormError(`Status error: ${error.response.data.status.join(', ')}`)
+                } else {
+                    setFormError(`Server error: ${error.response.status} - ${error.response.data?.detail || 'Unknown error'}`)
+                }
+            } else if (error.request) {
+                setFormError("Network error: Unable to connect to server.")
+            } else {
+                setFormError(error.message || "Failed to accept assignment")
+            }
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+    // Update the handleCancelEmergency function
+    const handleCancelEmergency = async (assignmentId) => {
+        try {
+            setIsSubmitting(true)
+
+            // First update status to cancelled
+            await apiClient.post(`/emergencies/${assignmentId}/status/`, {
+                status: 'cancelled',
+                details: 'Cancelled by first aider'
+            })
+
+            // Then remove from local state
+            setAssignments(prev => prev.filter(assignment => assignment.id !== assignmentId))
+            setFormSuccess("Emergency alert cancelled successfully")
+
+        } catch (error) {
+            console.error('Failed to cancel emergency:', error)
+            setFormError("Failed to cancel emergency alert")
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
+    // // Add this function to handle direct status updates without location
+    // const handleQuickStatusUpdate = async (assignmentId, newStatus) => {
+    //     try {
+    //         const updateData = {
+    //             status: newStatus,
+    //             details: `Status changed to ${newStatus}`
+    //         }
+
+    //         const response = await apiClient.post(`/emergencies/${assignmentId}/status/`, updateData)
+
+    //         // Update local state
+    //         setAssignments(prev => prev.map(assignment =>
+    //             assignment.id === assignmentId
+    //                 ? { ...assignment, status: mapStatusToUI(newStatus) }
+    //                 : assignment
+    //         ))
+
+    //         setFormSuccess(`Status updated to ${newStatus.replace('_', ' ')}!`)
+
+    //     } catch (error) {
+    //         console.error('Quick status update failed:', error)
+    //         setFormError("Failed to update status. Please try the detailed update form.")
+    //     }
+    // }
 
     // Open victim assessment form
     const handleOpenVictimAssessment = (victim = null) => {
@@ -1152,7 +1304,7 @@ export default function FirstAiderDashboard() {
         return priorityMap[condition] || "Medium"
     }
 
-    // Submit victim assessment
+    // Update the handleVictimAssessment function to send notification
     const handleVictimAssessment = async (e) => {
         e.preventDefault()
         setIsSubmitting(true)
@@ -1165,11 +1317,7 @@ export default function FirstAiderDashboard() {
 
             console.log('🩺 Starting victim assessment process...')
 
-            // If we get a 403 error, we'll handle it gracefully
-            // For now, we'll save the assessment locally and show a success message
-            // without making the API call that's causing permission issues
-
-            // Update local state regardless of API success
+            // Update local state
             if (selectedVictim) {
                 setVictims(prev => prev.map(victim =>
                     victim.id === selectedVictim.id
@@ -1184,11 +1332,14 @@ export default function FirstAiderDashboard() {
                             status: victimAssessment.condition,
                             hasAssessment: true,
                             assessmentSummary: summary,
-                            // Store assessment data locally since API is failing
                             localAssessment: {
                                 ...victimAssessment,
                                 timestamp: new Date().toISOString()
-                            }
+                            },
+                            // Add emergency name for differentiation
+                            emergencyName: selectedAssignment?.type || `Emergency-${Date.now()}`,
+                            // Mark if attended
+                            attended: victimAssessment.condition === 'stable' || victimAssessment.condition === 'recovering'
                         }
                         : victim
                 ))
@@ -1209,60 +1360,26 @@ export default function FirstAiderDashboard() {
                     localAssessment: {
                         ...victimAssessment,
                         timestamp: new Date().toISOString()
-                    }
+                    },
+                    emergencyName: selectedAssignment?.type || `Emergency-${Date.now()}`,
+                    attended: victimAssessment.condition === 'stable' || victimAssessment.condition === 'recovering'
                 }
                 setVictims(prev => [...prev, newVictim])
             }
 
-            // Try to send to API, but if it fails, we'll still show success locally
-            try {
-                const firstAiderInfo = getFirstAiderInfo();
+            // Send notification to hospital if there's an active communication
+            const activeCommunication = hospitalCommunications.find(
+                comm => comm.emergency_alert_id === selectedVictim?.id &&
+                    ['sent', 'acknowledged', 'preparing'].includes(comm.status)
+            )
 
-                if (firstAiderInfo && firstAiderInfo.id) {
-                    const assessmentData = {
-                        heart_rate: victimAssessment.heartRate || null,
-                        blood_pressure: victimAssessment.bloodPressure || "",
-                        temperature: victimAssessment.temperature || null,
-                        respiratory_rate: victimAssessment.respiratoryRate || null,
-                        oxygen_saturation: victimAssessment.oxygenSaturation || null,
-                        gcs_eyes: victimAssessment.gcs_eyes || null,
-                        gcs_verbal: victimAssessment.gcs_verbal || null,
-                        gcs_motor: victimAssessment.gcs_motor || null,
-                        blood_glucose: victimAssessment.bloodGlucose || null,
-                        chief_complaint: victimAssessment.symptoms.join(', ') || "Medical assessment",
-                        injuries: victimAssessment.injuries.join(', ') || "",
-                        allergies: victimAssessment.allergies || "",
-                        medications: victimAssessment.medications || "",
-                        medical_history: victimAssessment.medicalHistory || "",
-                        pain_level: victimAssessment.painLevel || "",
-                        pain_location: victimAssessment.painLocation || "",
-                        triage_category: victimAssessment.triage_category || "delayed",
-                        treatment_provided: victimAssessment.treatmentProvided || "",
-                        notes: victimAssessment.notes || "",
-                        recommendations: victimAssessment.recommendations || ""
-                    }
-
-                    console.log('🩺 Attempting to save assessment to API...');
-
-                    // Try to find an existing communication or create a simple one
-                    let communicationId = selectedVictim?.communicationId;
-
-                    if (communicationId) {
-                        await apiClient.post(`/hospital-comms/api/communications/${communicationId}/add-assessment/`, assessmentData);
-                        console.log('Assessment saved to existing communication');
-                    } else {
-                        console.log(' No communication ID found, assessment saved locally only');
-                        // We'll just save locally since creating communications might also have permission issues
-                    }
-                }
-            } catch (apiError) {
-                console.warn('API save failed, but assessment saved locally:', apiError);
-                // We don't throw the error here - we continue with local success
+            if (activeCommunication) {
+                await sendAssessmentNotification(summary, activeCommunication.id, activeCommunication.hospital_id)
             }
 
             setShowVictimAssessmentForm(false)
             setShowAssessmentSummary(true)
-            setFormSuccess("Victim assessment completed successfully! (Saved locally)")
+            setFormSuccess("Victim assessment completed successfully! Hospital has been notified.")
 
         } catch (error) {
             console.error('Victim assessment failed:', error)
@@ -1270,8 +1387,8 @@ export default function FirstAiderDashboard() {
         } finally {
             setIsSubmitting(false)
         }
-
     }
+
 
     // View assessment summary
     const handleViewAssessmentSummary = (victim) => {
@@ -1631,6 +1748,37 @@ export default function FirstAiderDashboard() {
         }
     }
 
+    // Add this function to your FirstAiderDashboard component
+
+    // Function to send notification to hospital
+    const sendAssessmentNotification = async (assessmentSummary, communicationId, hospitalId) => {
+        try {
+            const notificationData = {
+                user_ids: [hospitalId], // You'll need to get the hospital user IDs
+                title: "New Victim Assessment Received",
+                message: `Assessment completed for ${assessmentSummary.victimName}. Condition: ${assessmentSummary.assessment.condition}, Priority: ${assessmentSummary.priority}`,
+                notification_type: "victim_assessment",
+                channel: "in_app", // or 'push', 'email', 'sms' based on preference
+                priority: assessmentSummary.priority.toLowerCase(),
+                hospital_communication_id: communicationId,
+                metadata: {
+                    victim_name: assessmentSummary.victimName,
+                    condition: assessmentSummary.assessment.condition,
+                    triage: assessmentSummary.assessment.triage,
+                    assessment_id: `assessment-${Date.now()}`,
+                    timestamp: new Date().toISOString()
+                }
+            }
+
+            await apiClient.post('/notifications/api/send-single/', notificationData)
+            console.log('Assessment notification sent to hospital')
+        } catch (error) {
+            console.error('Failed to send assessment notification:', error)
+        }
+    }
+
+
+
     // Fetch data on component mount
     useEffect(() => {
         const loadData = async () => {
@@ -1666,11 +1814,17 @@ export default function FirstAiderDashboard() {
 
     const getStatusIcon = (status) => {
         switch (status) {
-            case "pending": return <AlertTriangle className="w-5 h-5 text-[#740000]" />
-            case "in-progress": return <Navigation className="w-5 h-5 text-[#b90000]" />
-            case "completed": return <CheckCircle className="w-5 h-5 text-[#1a0000]" />
-            case "cancelled": return <X className="w-5 h-5 text-[#740000]" />
-            default: return <AlertCircle className="w-5 h-5 text-[#740000]" />
+            case "dispatched":
+                return <Navigation className="w-5 h-5 text-blue-600" /> // Blue for dispatched/assigned
+            case "en_route":
+                return <Compass className="w-5 h-5 text-orange-500" /> // Orange for en route
+            case "arrived":
+                return <MapPin className="w-5 h-5 text-green-600" /> // Green for arrived
+            case "completed":
+                return <CheckCircle className="w-5 h-5 text-[#1a0000]" /> // Dark for completed
+
+            default:
+                return <AlertCircle className="w-5 h-5 text-[#740000]" />
         }
     }
 
@@ -1837,7 +1991,7 @@ export default function FirstAiderDashboard() {
                                                                 </button>
                                                             </>
                                                         )}
-                                                        {assignment.status === "in-progress" && (
+                                                        {assignment.status === "dispatched" && (
                                                             <button
                                                                 onClick={() => handleOpenStatusUpdate(assignment)}
                                                                 className="px-3 py-1 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors"

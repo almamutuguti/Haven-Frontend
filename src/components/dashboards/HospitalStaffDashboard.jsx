@@ -1,7 +1,7 @@
 "use client"
 
 import { Sidebar } from "../SideBar"
-import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X, RefreshCw } from "lucide-react"
+import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X, RefreshCw, Stethoscope, Eye, User, Heart, FileText } from "lucide-react"
 import { useState, useEffect } from "react"
 import { apiClient } from "../../utils/api"
 import { useAuth } from "../context/AuthContext"
@@ -13,7 +13,9 @@ export default function HospitalStaffDashboard() {
     const [currentHospital, setCurrentHospital] = useState(null)
     const [showAcknowledgeModal, setShowAcknowledgeModal] = useState(false)
     const [showPreparationModal, setShowPreparationModal] = useState(false)
+    const [showPatientDetailsModal, setShowPatientDetailsModal] = useState(false)
     const [selectedCommunication, setSelectedCommunication] = useState(null)
+    const [selectedPatient, setSelectedPatient] = useState(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const { user } = useAuth()
@@ -34,7 +36,8 @@ export default function HospitalStaffDashboard() {
         activePatients: 0,
         criticalCases: 0,
         pendingCommunications: 0,
-        activeIncidents: 0
+        activeIncidents: 0,
+        totalAssessments: 0
     })
 
     // Initialize current hospital based on user's registered hospital
@@ -117,138 +120,108 @@ export default function HospitalStaffDashboard() {
         }
     }
 
-    // Enhanced fetch for hospital communications from database - WITH IMPROVED ERROR HANDLING
+    // CORRECTED: Fetch hospital communications for THIS HOSPITAL
     const fetchHospitalCommunications = async () => {
-        if (!currentHospital) {
-            console.log('DEBUG - No current hospital set, skipping communications fetch')
-            return
-        }
-
-        console.log('DEBUG - Fetching communications for hospital:', currentHospital.id, currentHospital.name)
-
         try {
-            let communications = []
-            let success = false
+            console.log('DEBUG - Fetching hospital communications for hospital:', currentHospital)
 
-            // Strategy 1: Try filtered endpoint with hospital ID
-            try {
-                console.log('DEBUG - Trying filtered endpoint with hospital ID:', currentHospital.id)
-                const response = await apiClient.get(`/hospital-comms/api/communications/?hospital=${currentHospital.id}`)
-                console.log('DEBUG - Filtered endpoint response status:', response?.status)
-
-                // Handle different response structures
-                if (response && response.data) {
-                    if (Array.isArray(response.data)) {
-                        communications = response.data
-                    } else if (response.data.results && Array.isArray(response.data.results)) {
-                        communications = response.data.results
-                    } else if (typeof response.data === 'object') {
-                        // Try to extract any array from the response object
-                        const possibleArrays = ['communications', 'results', 'data']
-                        for (const key of possibleArrays) {
-                            if (Array.isArray(response.data[key])) {
-                                communications = response.data[key]
-                                break
-                            }
-                        }
-                    }
-                } else if (Array.isArray(response)) {
-                    communications = response
-                }
-
-                console.log('DEBUG - Successfully fetched from filtered endpoint:', communications.length, 'items')
-                success = true
-
-            } catch (filterError) {
-                console.log('DEBUG - Filtered endpoint failed:', filterError.message)
+            if (!currentHospital) {
+                console.log('DEBUG - No current hospital set, skipping communications fetch')
+                setHospitalCommunications([])
+                return
             }
 
-            // Strategy 2: If filtered endpoint failed, try general endpoint and filter manually
-            if (!success) {
-                try {
-                    console.log('DEBUG - Trying general endpoint')
-                    const response = await apiClient.get('/hospital-comms/api/communications/')
+            let communications = [];
 
-                    let allComms = []
-                    if (response && response.data) {
-                        if (Array.isArray(response.data)) {
-                            allComms = response.data
-                        } else if (response.data.results && Array.isArray(response.data.results)) {
-                            allComms = response.data.results
-                        } else if (typeof response.data === 'object') {
-                            const possibleArrays = ['communications', 'results', 'data']
-                            for (const key of possibleArrays) {
-                                if (Array.isArray(response.data[key])) {
-                                    allComms = response.data[key]
-                                    break
-                                }
-                            }
-                        }
-                    } else if (Array.isArray(response)) {
-                        allComms = response
-                    }
+            try {
+                // Try to fetch all communications
+                console.log('DEBUG - Making API call to /hospital-comms/api/communications/')
+                const response = await apiClient.get('/hospital-comms/api/communications/')
+                console.log('DEBUG - Raw API response:', response)
 
-                    console.log('DEBUG - All communications from general endpoint:', allComms.length, 'items')
+                // Extract communications array from response
+                if (Array.isArray(response)) {
+                    communications = response;
+                    console.log('DEBUG - Response is direct array')
+                } else if (response && Array.isArray(response.data)) {
+                    communications = response.data;
+                    console.log('DEBUG - Response has data array')
+                } else if (response && response.data && Array.isArray(response.data.results)) {
+                    communications = response.data.results;
+                    console.log('DEBUG - Response has data.results array')
+                } else if (response && Array.isArray(response.results)) {
+                    communications = response.results;
+                    console.log('DEBUG - Response has results array')
+                } else {
+                    console.log('DEBUG - Unexpected response format, trying to extract data...', response)
+                    // Try to find communications in the response object
+                    communications = response?.communications || response?.data || [];
+                }
 
-                    // Filter by hospital ID or name
-                    communications = allComms.filter(comm => {
-                        const hospitalId = comm.hospital_id || comm.hospital?.id
-                        const hospitalName = comm.hospital_name || comm.hospital?.name
+                console.log(`DEBUG - Total communications fetched: ${communications.length}`)
 
-                        const matchesId = hospitalId === currentHospital.id
-                        const matchesName = hospitalName && currentHospital.name &&
-                            hospitalName.toLowerCase() === currentHospital.name.toLowerCase()
+                // Log all communications for debugging
+                communications.forEach((comm, index) => {
+                    console.log(`DEBUG - Communication ${index + 1}:`, {
+                        id: comm.id,
+                        hospital_id: comm.hospital_id,
+                        hospital: comm.hospital,
+                        hospital_name: comm.hospital_name,
+                        first_aider: comm.first_aider,
+                        victim_name: comm.victim_name,
+                        status: comm.status
+                    })
+                })
 
-                        return matchesId || matchesName
+                // CORRECTED: Filter communications by HOSPITAL, not first aider
+                const filteredCommunications = communications.filter(comm => {
+                    // Try different possible field names for hospital ID
+                    const hospitalId = comm.hospital_id || comm.hospital?.id || comm.hospital
+                    const hospitalName = comm.hospital_name || comm.hospital?.name
+
+                    console.log(`DEBUG - Comparing hospital:`, {
+                        commHospitalId: hospitalId,
+                        currentHospitalId: currentHospital.id,
+                        commHospitalName: hospitalName,
+                        currentHospitalName: currentHospital.name
                     })
 
-                    console.log('DEBUG - Filtered communications:', communications.length, 'items')
-                    success = true
+                    // Check if either ID or name matches
+                    const idMatch = hospitalId && hospitalId.toString() === currentHospital.id.toString()
+                    const nameMatch = hospitalName && currentHospital.name &&
+                        hospitalName.toLowerCase().includes(currentHospital.name.toLowerCase())
 
-                } catch (generalError) {
-                    console.error('DEBUG - General endpoint also failed:', generalError.message)
-                    throw new Error('Unable to fetch communications from database: ' + generalError.message)
-                }
-            }
+                    console.log(`DEBUG - Hospital ID match: ${idMatch}, Name match: ${nameMatch}`)
 
-            // Strategy 3: If both endpoints fail, use empty array but don't throw error
-            if (!success) {
-                console.warn('DEBUG - All endpoints failed, using empty communications array')
+                    return idMatch || nameMatch
+                })
+
+                communications = filteredCommunications
+                console.log(`DEBUG - Filtered ${communications.length} communications for hospital ${currentHospital.id}`)
+
+            } catch (apiError) {
+                console.error('DEBUG - Communications API failed:', apiError)
                 communications = []
             }
 
-            console.log('DEBUG - Final communications data before processing:', communications)
+            // Process and set communications
+            const formattedCommunications = communications.map(comm => {
+                let hospitalName = comm.hospital_name || comm.hospital?.name || currentHospital.name
 
-            // Process communications - handle different field names and formats
-            const processedCommunications = communications.map(comm => {
-                console.log('DEBUG - Processing communication:', comm)
-
-                // Extract first aider information - handle different field name variations
-                const firstAiderId = comm.first_aider || comm.first_aider_id || comm.user_id
-                const firstAiderName = comm.first_aider_name ||
-                    comm.first_aider_user?.name ||
-                    comm.user?.name ||
-                    'Unknown First Aider'
-
-                console.log('DEBUG - First aider info:', { firstAiderId, firstAiderName })
-
-                // Handle different field name variations based on your Django model
-                const communication = {
+                return {
                     id: comm.id,
                     emergency_alert_id: comm.emergency_alert_id || comm.alert_reference_id,
-                    alert_reference_id: comm.alert_reference_id || comm.emergency_alert_id,
-                    hospital_id: comm.hospital_id || comm.hospital?.id,
-                    hospital_name: comm.hospital_name || comm.hospital?.name,
-                    first_aider: firstAiderId,
-                    first_aider_name: firstAiderName,
+                    hospital_id: comm.hospital_id || comm.hospital?.id || comm.hospital,
+                    hospital_name: hospitalName,
+                    first_aider: comm.first_aider || comm.first_aider_id,
+                    first_aider_name: comm.first_aider_name || 'Unknown First Aider',
                     priority: comm.priority || 'high',
                     victim_name: comm.victim_name || 'Unknown Victim',
                     victim_age: comm.victim_age,
                     victim_gender: comm.victim_gender,
                     chief_complaint: comm.chief_complaint || 'Emergency condition',
                     vital_signs: comm.vital_signs || {},
-                    initial_assessment: comm.initial_assessment || '',
-                    first_aid_provided: comm.first_aid_provided || 'Basic first aid provided',
+                    first_aid_provided: comm.first_aid_provided || 'Basic first aid',
                     estimated_arrival_minutes: comm.estimated_arrival_minutes || 15,
                     required_specialties: Array.isArray(comm.required_specialties)
                         ? comm.required_specialties
@@ -260,65 +233,92 @@ export default function HospitalStaffDashboard() {
                     status: comm.status || 'pending',
                     created_at: comm.created_at || new Date().toISOString(),
                     updated_at: comm.updated_at || new Date().toISOString(),
-                    sent_to_hospital_at: comm.sent_to_hospital_at,
-                    hospital_ready_at: comm.hospital_ready_at,
-                    doctors_ready: comm.doctors_ready || false,
-                    nurses_ready: comm.nurses_ready || false,
-                    equipment_ready: comm.equipment_ready || false,
-                    bed_ready: comm.bed_ready || false,
-                    blood_available: comm.blood_available || false,
-                    hospital_preparation_notes: comm.hospital_preparation_notes || "",
-                    originalData: comm // Keep original data for reference
+                    has_assessment: !!comm.assessment_data,
+                    originalData: comm
                 }
-
-                return communication
             })
 
-            console.log('DEBUG - Processed communications:', processedCommunications)
-            setAllCommunications(processedCommunications)
-            setHospitalCommunications(processedCommunications)
+            console.log('DEBUG - Final formatted communications:', formattedCommunications)
+            setHospitalCommunications(formattedCommunications)
+            setAllCommunications(formattedCommunications)
 
-            // Update stats - count only active communications (not failed or cancelled)
-            const activeComms = processedCommunications.filter(c =>
-                !['failed', 'cancelled', 'completed'].includes(c.status)
+            // In your fetchHospitalCommunications function, update the stats calculation:
+            const activeComms = formattedCommunications.filter(c =>
+                ['sent', 'acknowledged', 'preparing', 'ready', 'en_route', 'arrived'].includes(c.status) // Remove 'completed'
+            ).length
+
+            const assessmentsCount = formattedCommunications.filter(c =>
+                c.has_assessment
             ).length
 
             setStats(prev => ({
                 ...prev,
-                pendingCommunications: activeComms
+                pendingCommunications: activeComms,
+                totalAssessments: assessmentsCount
             }))
 
         } catch (error) {
-            console.error('Failed to fetch hospital communications from database:', error)
-            // Don't clear existing communications on error, just log it
-            console.log('DEBUG - Keeping existing communications due to error')
-
-            // Update stats to reflect current state
-            const activeComms = hospitalCommunications.filter(c =>
-                !['failed', 'cancelled', 'completed'].includes(c.status)
-            ).length
-
-            setStats(prev => ({
-                ...prev,
-                pendingCommunications: activeComms
-            }))
+            console.error('Failed to fetch hospital communications:', error)
+            setHospitalCommunications([])
+            setAllCommunications([])
         }
     }
 
-    // Fetch patients data from database
+    // Enhanced fetchPatients function - only shows non-discharged patients
     const fetchPatients = async () => {
         try {
-            // For now, use empty array since we don't have patients endpoint
-            // In real implementation, you would fetch from /patients/?hospital=${currentHospital.id}
-            setPatients([])
+            // Get communications that have victim assessments and have arrived, but NOT discharged
+            const communicationsWithAssessments = hospitalCommunications.filter(comm =>
+                (comm.status === 'arrived' || comm.has_assessment) && // Remove 'completed' from this condition
+                comm.victim_name &&
+                comm.status !== 'completed' && // Explicitly exclude completed/discharged
+                comm.status !== 'discharged'
+            )
 
+            // Transform communications into patient records
+            const patientRecords = communicationsWithAssessments.map(comm => {
+                // Extract assessment data from the communication
+                const assessmentData = comm.assessment_data || comm.originalData?.assessment_data || {};
+
+                return {
+                    id: `patient-${comm.id}`,
+                    name: comm.victim_name || "Unknown Patient",
+                    age: comm.victim_age || "N/A",
+                    gender: comm.victim_gender || "Unknown",
+                    condition: comm.chief_complaint || "Emergency condition",
+                    status: getPatientStatus(comm.status, comm.priority),
+                    admittedAt: new Date(comm.updated_at).toLocaleDateString(),
+                    communicationId: comm.id, // This is the hospital communication ID
+                    emergencyAlertId: comm.emergency_alert_id, // This is the actual emergency alert ID
+                    vitalSigns: comm.vital_signs || {},
+                    priority: comm.priority,
+                    // Assessment data from first aider
+                    hasAssessment: comm.has_assessment || false,
+                    assessmentData: assessmentData,
+                    assessmentSummary: comm.assessment_summary || null,
+                    firstAiderName: comm.first_aider_name,
+                    emergencyType: comm.chief_complaint,
+                    arrivalTime: comm.estimated_arrival_minutes ?
+                        `ETA: ${comm.estimated_arrival_minutes} mins` : 'Arrival time unknown',
+                    // Additional medical info from assessment
+                    allergies: assessmentData.allergies || 'Not specified',
+                    medications: assessmentData.medications || 'None reported',
+                    medicalHistory: assessmentData.medicalHistory || 'Not specified'
+                }
+            })
+
+            console.log('DEBUG - Active patient records:', patientRecords);
+            setPatients(patientRecords);
+
+            // Update stats
             setStats(prev => ({
                 ...prev,
-                activePatients: 0,
-                criticalCases: 0
+                activePatients: patientRecords.length,
+                criticalCases: patientRecords.filter(p => p.priority === 'critical' || p.priority === 'high').length
             }))
+
         } catch (error) {
-            console.error('Failed to fetch patients from database:', error)
+            console.error('Failed to fetch patients:', error)
             setPatients([])
             setStats(prev => ({
                 ...prev,
@@ -326,6 +326,14 @@ export default function HospitalStaffDashboard() {
                 criticalCases: 0
             }))
         }
+    }
+    // Helper function to determine patient status
+    const getPatientStatus = (communicationStatus, priority) => {
+        if (communicationStatus === 'completed') return 'discharged'
+        if (communicationStatus === 'arrived') {
+            return priority === 'critical' ? 'critical' : 'stable'
+        }
+        return 'active'
     }
 
     // Load all data when hospital changes
@@ -375,7 +383,7 @@ export default function HospitalStaffDashboard() {
                             Currently viewing communications for: <strong>{currentHospital.name}</strong>
                             {hospitalCommunications.length > 0 && (
                                 <span className="text-[#740000] ml-2">
-                                    ({hospitalCommunications.length} communications)
+                                    ({hospitalCommunications.length} communications, {stats.totalAssessments} assessments)
                                 </span>
                             )}
                         </div>
@@ -425,6 +433,12 @@ export default function HospitalStaffDashboard() {
             hospital_preparation_notes: communication.hospital_preparation_notes || ""
         })
         setShowPreparationModal(true)
+    }
+
+    // Open patient details modal
+    const handleOpenPatientDetails = (patient) => {
+        setSelectedPatient(patient)
+        setShowPatientDetailsModal(true)
     }
 
     // Handle acknowledge submission - SIMPLIFIED VERSION
@@ -565,7 +579,166 @@ export default function HospitalStaffDashboard() {
         }
     }
 
-    
+    // Update handlePatientArrival to use correct emergency_alert_id
+    const handlePatientArrival = async (communication) => {
+        try {
+            const emergencyAlertId = communication.emergency_alert_id;
+
+            if (!emergencyAlertId) {
+                throw new Error('No emergency alert ID found for this communication');
+            }
+
+            // Update emergency status to 'arrived'
+            await apiClient.post(`/emergencies/${emergencyAlertId}/status/`, {
+                status: 'arrived',
+                details: 'Patient arrived at hospital and admitted'
+            });
+
+            // Also update communication status
+            await apiClient.post(`/hospital-comms/api/communications/${communication.id}/update-status/`, {
+                status: 'arrived',
+                notes: 'Patient arrived at hospital and admitted'
+            });
+
+            // Refresh data
+            await fetchHospitalCommunications();
+            await fetchPatients();
+
+            // Send notification to first aider
+            await apiClient.post('/notifications/api/send-single/', {
+                user_id: communication.first_aider,
+                title: "Patient Arrived at Hospital",
+                message: `${communication.victim_name} has safely arrived at ${currentHospital?.name || 'the hospital'} and is being admitted.`,
+                notification_type: "patient_arrived",
+                channel: "in_app",
+                priority: "medium",
+                hospital_communication_id: communication.id
+            });
+
+            alert('Patient arrival recorded successfully! First aider has been notified.');
+
+        } catch (error) {
+            console.error('Failed to update patient arrival:', error);
+            alert('Failed to record patient arrival. Please try again.');
+        }
+    }
+
+    const handlePatientDischarge = async (patient) => {
+        try {
+            console.log('DEBUG - Discharging patient:', {
+                patientId: patient.id,
+                patientName: patient.name,
+                communicationId: patient.communicationId,
+                emergencyAlertId: patient.emergencyAlertId
+            });
+
+            // Find the communication to get the emergency_alert_id
+            const communication = hospitalCommunications.find(comm => comm.id === patient.communicationId);
+
+            if (!communication) {
+                throw new Error('Communication not found for this patient');
+            }
+
+            const emergencyAlertId = communication.emergency_alert_id;
+
+            if (!emergencyAlertId) {
+                throw new Error('No emergency alert ID associated with this communication');
+            }
+
+            console.log('DEBUG - Using emergency alert ID:', emergencyAlertId);
+
+            let success = false;
+            let lastError = null;
+
+            // First, update the hospital communication status to 'discharged'
+            try {
+                console.log('DEBUG - Updating communication status to discharged');
+                const commResponse = await apiClient.post(
+                    `/hospital-comms/api/communications/${patient.communicationId}/update-status/`,
+                    {
+                        status: 'discharged',
+                        notes: `Patient ${patient.name} discharged from hospital on ${new Date().toLocaleDateString()}`
+                    }
+                );
+                console.log('DEBUG - Communication status update success:', commResponse.data);
+                success = true;
+            } catch (commError) {
+                console.log('DEBUG - Communication status update failed:', commError.response?.data || commError.message);
+                lastError = commError;
+            }
+
+            // Then try to cancel/update the emergency alert as well
+            if (success) {
+                try {
+                    console.log('DEBUG - Trying cancel endpoint with alert ID:', emergencyAlertId);
+                    const cancelResponse = await apiClient.post(
+                        `/emergencies/${emergencyAlertId}/cancel/`,
+                        {
+                            reason: `Patient ${patient.name} discharged from hospital`
+                        }
+                    );
+                    console.log('DEBUG - Cancel endpoint success:', cancelResponse.data);
+                } catch (cancelError) {
+                    console.log('DEBUG - Cancel endpoint failed, trying status update:', cancelError.response?.data || cancelError.message);
+
+                    try {
+                        console.log('DEBUG - Trying status update with alert ID:', emergencyAlertId);
+                        const statusResponse = await apiClient.post(
+                            `/emergencies/${emergencyAlertId}/status/`,
+                            {
+                                status: 'completed',
+                                details: `Patient ${patient.name} discharged from hospital`
+                            }
+                        );
+                        console.log('DEBUG - Status update success:', statusResponse.data);
+                    } catch (statusError) {
+                        console.log('DEBUG - Status update failed:', statusError.response?.data || statusError.message);
+                        // Don't fail the entire discharge if emergency alert update fails
+                    }
+                }
+            }
+
+            if (success) {
+                // Remove from all local states immediately
+                setPatients(prev => prev.filter(p => p.id !== patient.id));
+                setHospitalCommunications(prev => prev.filter(comm => comm.id !== patient.communicationId));
+                setAllCommunications(prev => prev.filter(comm => comm.id !== patient.communicationId));
+
+                // Update stats
+                setStats(prev => ({
+                    ...prev,
+                    activePatients: Math.max(0, prev.activePatients - 1),
+                    criticalCases: (patient.priority === 'critical' || patient.priority === 'high')
+                        ? Math.max(0, prev.criticalCases - 1)
+                        : prev.criticalCases
+                }));
+
+                alert('Patient discharged successfully! They will no longer appear in the dashboard.');
+
+            } else {
+                throw lastError;
+            }
+
+        } catch (error) {
+            console.error('DEBUG - Discharge failed:', error);
+
+            let errorMessage = 'Failed to discharge patient. ';
+
+            if (error.response) {
+                if (error.response.status === 404) {
+                    errorMessage += 'Emergency alert not found. The alert may have been already processed.';
+                } else if (error.response.status === 500) {
+                    errorMessage += 'Server error. Please try again or contact support.';
+                } else {
+                    errorMessage += `Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`;
+                }
+            } else {
+                errorMessage += error.message || 'Unknown error occurred.';
+            }
+
+            alert(errorMessage);
+        }
+    }
     // Handle input changes
     const handleAcknowledgeInputChange = (e) => {
         const { name, value } = e.target
@@ -590,8 +763,8 @@ export default function HospitalStaffDashboard() {
                 return "bg-[#740000]/10 text-[#740000] border-[#740000]/20"
             case "active":
                 return "bg-[#b90000]/10 text-[#b90000] border-[#b90000]/20"
-            case "resolved":
-                return "bg-[#1a0000]/10 text-[#1a0000] border-[#1a0000]/20"
+            case "discharged":
+                return "bg-green-100 text-green-800 border-green-200"
             case "pending":
                 return "bg-blue-100 text-blue-800 border-blue-200"
             case "sent":
@@ -654,13 +827,12 @@ export default function HospitalStaffDashboard() {
         return 'N/A'
     }
 
-    // Filter communications to exclude failed and cancelled ones for display
+    // Filter communications to exclude failed, cancelled, completed AND discharged ones for display
     const getDisplayCommunications = () => {
         return hospitalCommunications.filter(comm =>
-            !['failed', 'cancelled', 'completed'].includes(comm.status)
+            !['failed', 'cancelled', 'completed', 'discharged'].includes(comm.status)
         )
     }
-
     // Get status display text
     const getStatusDisplay = (status) => {
         const statusMap = {
@@ -714,7 +886,7 @@ export default function HospitalStaffDashboard() {
                 <HospitalInfo />
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-8">
                     <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-4 sm:p-6">
                         <div className="flex items-center justify-between">
                             <div>
@@ -749,6 +921,15 @@ export default function HospitalStaffDashboard() {
                                 <p className="text-2xl sm:text-3xl font-bold text-[#1a0000]">{stats.activeIncidents}</p>
                             </div>
                             <Activity className="w-8 h-8 sm:w-12 sm:h-12 text-[#b90000]/20" />
+                        </div>
+                    </div>
+                    <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg p-4 sm:p-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-xs sm:text-sm text-[#740000] mb-1">Assessments</p>
+                                <p className="text-2xl sm:text-3xl font-bold text-[#1a0000]">{stats.totalAssessments}</p>
+                            </div>
+                            <Stethoscope className="w-8 h-8 sm:w-12 sm:h-12 text-[#b90000]/20" />
                         </div>
                     </div>
                 </div>
@@ -832,6 +1013,15 @@ export default function HospitalStaffDashboard() {
                                                                     <strong>Assessment:</strong> {communication.initial_assessment}
                                                                 </p>
                                                             )}
+                                                            {/* Show assessment badge if available */}
+                                                            {communication.has_assessment && (
+                                                                <div className="flex items-center gap-1 mt-2">
+                                                                    <Stethoscope className="w-4 h-4 text-[#b90000]" />
+                                                                    <span className="text-xs text-[#b90000] bg-[#b90000]/10 px-2 py-1 rounded">
+                                                                        Assessment Available
+                                                                    </span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-col items-start sm:items-end gap-2 self-stretch">
@@ -897,9 +1087,12 @@ export default function HospitalStaffDashboard() {
                                                             </button>
                                                         )}
                                                         {communication.status === 'ready' && (
-                                                            <span className="px-3 py-1 bg-green-100 text-green-800 rounded text-sm font-medium whitespace-nowrap">
-                                                                Ready for Arrival
-                                                            </span>
+                                                            <button
+                                                                onClick={() => handlePatientArrival(communication)}
+                                                                className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors whitespace-nowrap"
+                                                            >
+                                                                Mark as Arrived
+                                                            </button>
                                                         )}
                                                         {communication.status === 'en_route' && (
                                                             <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded text-sm font-medium whitespace-nowrap">
@@ -910,6 +1103,19 @@ export default function HospitalStaffDashboard() {
                                                             <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded text-sm font-medium whitespace-nowrap">
                                                                 Patient Arrived
                                                             </span>
+                                                        )}
+                                                        {communication.has_assessment && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const patient = patients.find(p => p.communicationId === communication.id)
+                                                                    if (patient) {
+                                                                        handleOpenPatientDetails(patient)
+                                                                    }
+                                                                }}
+                                                                className="px-3 py-1 border border-[#1a0000] text-[#1a0000] hover:bg-[#ffe6c5] rounded text-sm font-medium transition-colors whitespace-nowrap"
+                                                            >
+                                                                View Assessment
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -926,26 +1132,45 @@ export default function HospitalStaffDashboard() {
                         {/* Patients Section */}
                         <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
                             <div className="p-4 sm:p-6 border-b border-[#ffe6c5]">
-                                <h3 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Current Patients</h3>
-                                <p className="text-[#740000] text-sm sm:text-base">Patients currently admitted to the hospital</p>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Current Patients</h3>
+                                        <p className="text-[#740000] text-sm sm:text-base">Patients currently admitted to the hospital</p>
+                                    </div>
+                                    <span className="bg-[#b90000] text-white text-sm px-3 py-1 rounded-full">
+                                        {patients.length}
+                                    </span>
+                                </div>
                             </div>
                             <div className="p-4 sm:p-6">
                                 <div className="space-y-4">
                                     {patients.length === 0 ? (
-                                        <div className="text-center py-4">
+                                        <div className="text-center py-8">
                                             <Users className="w-8 h-8 text-[#740000]/50 mx-auto mb-2" />
                                             <p className="text-[#740000] text-sm">No patients currently admitted</p>
+                                            <p className="text-[#740000] text-xs mt-2">
+                                                Patients will appear here when they arrive at the hospital
+                                            </p>
                                         </div>
                                     ) : (
                                         patients.map((patient) => (
                                             <div
                                                 key={patient.id}
-                                                className="border border-[#ffe6c5] rounded-lg p-4 hover:border-[#b90000] transition"
+                                                className="border border-[#ffe6c5] rounded-lg p-4 hover:border-[#b90000] transition cursor-pointer"
+                                                onClick={() => handleOpenPatientDetails(patient)}
                                             >
                                                 <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3 gap-2">
                                                     <div className="flex-1">
                                                         <h3 className="font-semibold text-[#1a0000] wrap-break-word">{patient.name}</h3>
-                                                        <p className="text-sm text-[#740000]">{patient.age} years old</p>
+                                                        <p className="text-sm text-[#740000]">
+                                                            {patient.age} years old • {patient.gender}
+                                                        </p>
+                                                        {patient.hasAssessment && (
+                                                            <div className="flex items-center gap-1 mt-1">
+                                                                <Stethoscope className="w-3 h-3 text-[#b90000]" />
+                                                                <span className="text-xs text-[#b90000]">Assessment Available</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <span
                                                         className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(patient.status)} whitespace-nowrap self-start`}
@@ -956,6 +1181,47 @@ export default function HospitalStaffDashboard() {
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between text-sm gap-1">
                                                     <span className="text-[#740000] wrap-break-word">Condition: {patient.condition}</span>
                                                     <span className="text-[#740000] whitespace-nowrap">Admitted {patient.admittedAt}</span>
+                                                </div>
+
+                                                {/* Show vital signs if available */}
+                                                {patient.vitalSigns && Object.keys(patient.vitalSigns).length > 0 && (
+                                                    <div className="mt-2 pt-2 border-t border-[#ffe6c5]">
+                                                        <div className="flex gap-4 text-xs text-[#740000]">
+                                                            {patient.vitalSigns.heartRate && (
+                                                                <span>HR: {patient.vitalSigns.heartRate}bpm</span>
+                                                            )}
+                                                            {patient.vitalSigns.bloodPressure && (
+                                                                <span>BP: {patient.vitalSigns.bloodPressure}</span>
+                                                            )}
+                                                            {patient.vitalSigns.temperature && (
+                                                                <span>Temp: {patient.vitalSigns.temperature}°C</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex gap-2 mt-3">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenPatientDetails(patient);
+                                                        }}
+                                                        className="flex-1 px-3 py-1 bg-[#b90000] hover:bg-[#740000] text-white rounded text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                                                    >
+                                                        <Eye className="w-3 h-3" />
+                                                        Details
+                                                    </button>
+                                                    {patient.status !== 'discharged' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handlePatientDischarge(patient);
+                                                            }}
+                                                            className="flex-1 px-3 py-1 border border-green-600 text-green-600 hover:bg-green-50 rounded text-sm font-medium transition-colors"
+                                                        >
+                                                            Discharge
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))
@@ -982,6 +1248,13 @@ export default function HospitalStaffDashboard() {
                                     <Users className="w-4 h-4 mr-2 flex-shrink-0" />
                                     View Team
                                 </button>
+                                <button
+                                    onClick={refreshCommunications}
+                                    className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base"
+                                >
+                                    <RefreshCw className="w-4 h-4 mr-2 flex-shrink-0" />
+                                    Refresh Data
+                                </button>
                             </div>
                         </div>
 
@@ -1002,6 +1275,7 @@ export default function HospitalStaffDashboard() {
                                         <p className="text-xs text-[#740000]">Hospital ID: {currentHospital.id}</p>
                                         <p className="text-xs text-[#740000]">Total Communications: {hospitalCommunications.length}</p>
                                         <p className="text-xs text-[#740000]">Active Communications: {displayCommunications.length}</p>
+                                        <p className="text-xs text-[#740000]">Current Patients: {patients.length}</p>
                                     </div>
                                 </div>
                             </div>
@@ -1010,7 +1284,7 @@ export default function HospitalStaffDashboard() {
                 </div>
             </main>
 
-            {/* Acknowledge Modal - Scrollable and Responsive */}
+            {/* Acknowledge Modal */}
             {showAcknowledgeModal && selectedCommunication && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
@@ -1077,7 +1351,7 @@ export default function HospitalStaffDashboard() {
                 </div>
             )}
 
-            {/* Preparation Update Modal - Scrollable and Responsive */}
+            {/* Preparation Update Modal */}
             {showPreparationModal && selectedCommunication && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
@@ -1196,6 +1470,252 @@ export default function HospitalStaffDashboard() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Patient Details Modal */}
+            {showPatientDetailsModal && selectedPatient && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-[#ffe6c5] flex-shrink-0">
+                            <h2 className="text-xl sm:text-2xl font-bold text-[#1a0000]">Patient Details & Assessment</h2>
+                            <button
+                                onClick={() => setShowPatientDetailsModal(false)}
+                                className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5 text-[#1a0000]" />
+                            </button>
+                        </div>
+                        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
+                            {/* Patient Header */}
+                            <div className="bg-[#ffe6c5] p-4 rounded-lg">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-[#1a0000]">{selectedPatient.name}</h3>
+                                        <p className="text-[#740000]">
+                                            {selectedPatient.age} years old • {selectedPatient.gender}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(selectedPatient.status)}`}>
+                                                {selectedPatient.status.charAt(0).toUpperCase() + selectedPatient.status.slice(1)}
+                                            </span>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(selectedPatient.priority)}`}>
+                                                {selectedPatient.priority?.toUpperCase() || 'MEDIUM'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm text-[#740000]">Admitted: {selectedPatient.admittedAt}</p>
+                                        <p className="text-sm text-[#740000]">First Aider: {selectedPatient.firstAiderName}</p>
+                                        {selectedPatient.emergencyType && (
+                                            <p className="text-sm text-[#740000]">Emergency: {selectedPatient.emergencyType}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Medical Information Grid */}
+                            <div className="grid md:grid-cols-2 gap-6">
+                                {/* Vital Signs */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3 flex items-center gap-2">
+                                        <Activity className="w-5 h-5" />
+                                        Vital Signs
+                                    </h4>
+                                    <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                        {selectedPatient.vitalSigns && Object.keys(selectedPatient.vitalSigns).length > 0 ? (
+                                            <div className="grid grid-cols-2 gap-4 text-sm">
+                                                {selectedPatient.vitalSigns.heartRate && (
+                                                    <div>
+                                                        <span className="text-[#740000]">Heart Rate:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.heartRate} bpm</p>
+                                                    </div>
+                                                )}
+                                                {selectedPatient.vitalSigns.bloodPressure && (
+                                                    <div>
+                                                        <span className="text-[#740000]">Blood Pressure:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.bloodPressure}</p>
+                                                    </div>
+                                                )}
+                                                {selectedPatient.vitalSigns.temperature && (
+                                                    <div>
+                                                        <span className="text-[#740000]">Temperature:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.temperature}°C</p>
+                                                    </div>
+                                                )}
+                                                {selectedPatient.vitalSigns.respiratoryRate && (
+                                                    <div>
+                                                        <span className="text-[#740000]">Respiratory Rate:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.respiratoryRate}</p>
+                                                    </div>
+                                                )}
+                                                {selectedPatient.vitalSigns.oxygenSaturation && (
+                                                    <div>
+                                                        <span className="text-[#740000]">Oxygen Saturation:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.oxygenSaturation}%</p>
+                                                    </div>
+                                                )}
+                                                {selectedPatient.vitalSigns.bloodGlucose && (
+                                                    <div>
+                                                        <span className="text-[#740000]">Blood Glucose:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.bloodGlucose} mg/dL</p>
+                                                    </div>
+                                                )}
+                                                {selectedPatient.vitalSigns.gcsScore && (
+                                                    <div className="col-span-2">
+                                                        <span className="text-[#740000]">GCS Score:</span>
+                                                        <p className="text-[#1a0000] font-medium">{selectedPatient.vitalSigns.gcsScore}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[#740000] text-sm">No vital signs recorded</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Assessment Information */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3 flex items-center gap-2">
+                                        <Stethoscope className="w-5 h-5" />
+                                        Assessment Information
+                                    </h4>
+                                    <div className="bg-white border border-[#ffe6c5] rounded-lg p-4 space-y-3">
+                                        <div>
+                                            <span className="text-[#740000] text-sm">Chief Complaint:</span>
+                                            <p className="text-[#1a0000] font-medium">{selectedPatient.condition}</p>
+                                        </div>
+                                        {selectedPatient.allergies && selectedPatient.allergies !== 'Not specified' && (
+                                            <div>
+                                                <span className="text-[#740000] text-sm">Allergies:</span>
+                                                <p className="text-[#1a0000] font-medium">{selectedPatient.allergies}</p>
+                                            </div>
+                                        )}
+                                        {selectedPatient.medications && selectedPatient.medications !== 'None reported' && (
+                                            <div>
+                                                <span className="text-[#740000] text-sm">Medications:</span>
+                                                <p className="text-[#1a0000] font-medium">{selectedPatient.medications}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Symptoms & Injuries */}
+                            {(selectedPatient.assessmentData?.symptoms?.length > 0 || selectedPatient.assessmentData?.injuries?.length > 0) && (
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {selectedPatient.assessmentData?.symptoms?.length > 0 && (
+                                        <div>
+                                            <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Symptoms Reported</h4>
+                                            <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedPatient.assessmentData.symptoms.map((symptom, index) => (
+                                                        <span key={index} className="px-3 py-1 bg-[#ffe6c5] text-[#1a0000] rounded-full text-sm">
+                                                            {symptom}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {selectedPatient.assessmentData?.injuries?.length > 0 && (
+                                        <div>
+                                            <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Injuries Identified</h4>
+                                            <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedPatient.assessmentData.injuries.map((injury, index) => (
+                                                        <span key={index} className="px-3 py-1 bg-[#ffe6c5] text-[#1a0000] rounded-full text-sm">
+                                                            {injury}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Pain Assessment */}
+                            {(selectedPatient.assessmentData?.painLevel || selectedPatient.assessmentData?.painLocation) && (
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Pain Assessment</h4>
+                                    <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                                            {selectedPatient.assessmentData.painLevel && (
+                                                <div>
+                                                    <span className="text-[#740000]">Pain Level:</span>
+                                                    <p className="text-[#1a0000] font-medium">{selectedPatient.assessmentData.painLevel}</p>
+                                                </div>
+                                            )}
+                                            {selectedPatient.assessmentData.painLocation && (
+                                                <div>
+                                                    <span className="text-[#740000]">Pain Location:</span>
+                                                    <p className="text-[#1a0000] font-medium">{selectedPatient.assessmentData.painLocation}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Treatment Provided */}
+                            {selectedPatient.assessmentData?.treatmentProvided && (
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Treatment Provided by First Aider</h4>
+                                    <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                        <p className="text-[#1a0000] whitespace-pre-wrap">{selectedPatient.assessmentData.treatmentProvided}</p>
+                                        {selectedPatient.assessmentData.medicationsAdministered && (
+                                            <div className="mt-3">
+                                                <span className="text-[#740000] text-sm font-medium">Medications Administered:</span>
+                                                <p className="text-[#1a0000] whitespace-pre-wrap">{selectedPatient.assessmentData.medicationsAdministered}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Assessment Notes */}
+                            {selectedPatient.assessmentData?.notes && (
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">First Aider Notes</h4>
+                                    <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                        <p className="text-[#1a0000] whitespace-pre-wrap">{selectedPatient.assessmentData.notes}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recommendations */}
+                            {selectedPatient.assessmentData?.recommendations && (
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">First Aider Recommendations</h4>
+                                    <div className="bg-white border border-[#ffe6c5] rounded-lg p-4">
+                                        <p className="text-[#1a0000] whitespace-pre-wrap">{selectedPatient.assessmentData.recommendations}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-4 pt-4 border-t border-[#ffe6c5]">
+                                <button
+                                    onClick={() => setShowPatientDetailsModal(false)}
+                                    className="flex-1 px-4 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded-lg font-medium transition-colors"
+                                >
+                                    Close
+                                </button>
+                                {selectedPatient.status !== 'discharged' && (
+                                    <button
+                                        onClick={() => {
+                                            handlePatientDischarge(selectedPatient);
+                                            setShowPatientDetailsModal(false);
+                                        }}
+                                        className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                                    >
+                                        Discharge Patient
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
