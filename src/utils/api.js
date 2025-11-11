@@ -16,6 +16,7 @@ const getAuthToken = () => {
 };
 
 // Enhanced API client with better error handling and logging
+// Enhanced API client with role-based error handling
 export const apiClient = {
   async request(endpoint, options = {}) {
     const token = getAuthToken();
@@ -47,11 +48,30 @@ export const apiClient = {
       if (response.status === 401) {
         // Token is invalid or expired
         console.log('Authentication failed with 401 status');
-        // Clear tokens but don't redirect
         localStorage.removeItem('haven_access_token');
         localStorage.removeItem('haven_refresh_token');
         localStorage.removeItem('haven_user');
         throw new Error('Authentication failed. Your session may have expired.');
+      }
+
+      if (response.status === 403) {
+        // Permission denied - likely role issue
+        console.log('Permission denied with 403 status');
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = { detail: 'Permission denied' };
+        }
+        
+        // Check if it's a role-based permission issue
+        const userData = localStorage.getItem('haven_user');
+        if (userData) {
+          const user = JSON.parse(userData);
+          throw new Error(`Permission denied. Your role (${user.role}) does not have access to this resource. Required role: first_aider`);
+        } else {
+          throw new Error('Permission denied. You do not have the required permissions to perform this action.');
+        }
       }
 
       if (!response.ok) {
@@ -84,6 +104,7 @@ export const apiClient = {
     }
   },
 
+  // ... rest of your methods remain the same
   async post(endpoint, data) {
     return this.request(endpoint, {
       method: 'POST',

@@ -117,7 +117,7 @@ export default function HospitalStaffDashboard() {
         }
     }
 
-    // Enhanced fetch for hospital communications from database - WITH FIRST AIDER INFO
+    // Enhanced fetch for hospital communications from database - WITH IMPROVED ERROR HANDLING
     const fetchHospitalCommunications = async () => {
         if (!currentHospital) {
             console.log('DEBUG - No current hospital set, skipping communications fetch')
@@ -128,74 +128,93 @@ export default function HospitalStaffDashboard() {
 
         try {
             let communications = []
+            let success = false
 
+            // Strategy 1: Try filtered endpoint with hospital ID
             try {
-                // First try the filtered endpoint with hospital ID
                 console.log('DEBUG - Trying filtered endpoint with hospital ID:', currentHospital.id)
                 const response = await apiClient.get(`/hospital-comms/api/communications/?hospital=${currentHospital.id}`)
-                console.log('DEBUG - Filtered endpoint full response:', response)
+                console.log('DEBUG - Filtered endpoint response status:', response?.status)
 
-                // Handle different response formats
-                if (Array.isArray(response)) {
-                    communications = response
-                    console.log('DEBUG - Response is direct array with', communications.length, 'items')
-                } else if (response && Array.isArray(response.data)) {
-                    communications = response.data
-                    console.log('DEBUG - Response has data array with', communications.length, 'items')
-                } else if (response && typeof response === 'object') {
-                    // Try to extract from various possible structures
-                    if (Array.isArray(response.results)) {
-                        communications = response.results
-                    } else if (Array.isArray(response.communications)) {
-                        communications = response.communications
-                    } else if (Array.isArray(response.data)) {
+                // Handle different response structures
+                if (response && response.data) {
+                    if (Array.isArray(response.data)) {
                         communications = response.data
-                    } else {
-                        console.log('DEBUG - Could not extract array from response object, trying response directly')
-                        communications = response || []
+                    } else if (response.data.results && Array.isArray(response.data.results)) {
+                        communications = response.data.results
+                    } else if (typeof response.data === 'object') {
+                        // Try to extract any array from the response object
+                        const possibleArrays = ['communications', 'results', 'data']
+                        for (const key of possibleArrays) {
+                            if (Array.isArray(response.data[key])) {
+                                communications = response.data[key]
+                                break
+                            }
+                        }
                     }
-                } else {
-                    communications = []
+                } else if (Array.isArray(response)) {
+                    communications = response
                 }
 
-                console.log('DEBUG - Extracted communications from filtered endpoint:', communications)
+                console.log('DEBUG - Successfully fetched from filtered endpoint:', communications.length, 'items')
+                success = true
 
             } catch (filterError) {
-                console.log('DEBUG - Filtered endpoint failed, trying general endpoint:', filterError)
+                console.log('DEBUG - Filtered endpoint failed:', filterError.message)
+            }
 
+            // Strategy 2: If filtered endpoint failed, try general endpoint and filter manually
+            if (!success) {
                 try {
-                    // Fallback to general endpoint and filter manually
+                    console.log('DEBUG - Trying general endpoint')
                     const response = await apiClient.get('/hospital-comms/api/communications/')
-                    console.log('DEBUG - General endpoint response:', response)
 
                     let allComms = []
-                    if (Array.isArray(response)) {
+                    if (response && response.data) {
+                        if (Array.isArray(response.data)) {
+                            allComms = response.data
+                        } else if (response.data.results && Array.isArray(response.data.results)) {
+                            allComms = response.data.results
+                        } else if (typeof response.data === 'object') {
+                            const possibleArrays = ['communications', 'results', 'data']
+                            for (const key of possibleArrays) {
+                                if (Array.isArray(response.data[key])) {
+                                    allComms = response.data[key]
+                                    break
+                                }
+                            }
+                        }
+                    } else if (Array.isArray(response)) {
                         allComms = response
-                    } else if (response && Array.isArray(response.data)) {
-                        allComms = response.data
-                    } else if (response && response.data && Array.isArray(response.data.results)) {
-                        allComms = response.data.results
-                    } else if (response && Array.isArray(response.results)) {
-                        allComms = response.results
-                    } else {
-                        allComms = response?.communications || response?.data || []
                     }
 
-                    console.log('DEBUG - All communications from general endpoint:', allComms)
+                    console.log('DEBUG - All communications from general endpoint:', allComms.length, 'items')
 
-                    // Filter by hospital name since we have hospital_name in the response
+                    // Filter by hospital ID or name
                     communications = allComms.filter(comm => {
+                        const hospitalId = comm.hospital_id || comm.hospital?.id
                         const hospitalName = comm.hospital_name || comm.hospital?.name
-                        console.log(`DEBUG - Comparing hospital: "${hospitalName}" with "${currentHospital.name}"`)
-                        return hospitalName === currentHospital.name
+
+                        const matchesId = hospitalId === currentHospital.id
+                        const matchesName = hospitalName && currentHospital.name &&
+                            hospitalName.toLowerCase() === currentHospital.name.toLowerCase()
+
+                        return matchesId || matchesName
                     })
 
-                    console.log('DEBUG - Filtered communications:', communications)
+                    console.log('DEBUG - Filtered communications:', communications.length, 'items')
+                    success = true
 
                 } catch (generalError) {
-                    console.error('DEBUG - All communication endpoints failed:', generalError)
-                    throw new Error('Unable to fetch communications from database')
+                    console.error('DEBUG - General endpoint also failed:', generalError.message)
+                    throw new Error('Unable to fetch communications from database: ' + generalError.message)
                 }
+            }
+
+            // Strategy 3: If both endpoints fail, use empty array but don't throw error
+            if (!success) {
+                console.warn('DEBUG - All endpoints failed, using empty communications array')
+                communications = []
             }
 
             console.log('DEBUG - Final communications data before processing:', communications)
@@ -206,7 +225,10 @@ export default function HospitalStaffDashboard() {
 
                 // Extract first aider information - handle different field name variations
                 const firstAiderId = comm.first_aider || comm.first_aider_id || comm.user_id
-                const firstAiderName = comm.first_aider_name || 'Unknown First Aider'
+                const firstAiderName = comm.first_aider_name ||
+                    comm.first_aider_user?.name ||
+                    comm.user?.name ||
+                    'Unknown First Aider'
 
                 console.log('DEBUG - First aider info:', { firstAiderId, firstAiderName })
 
@@ -240,6 +262,12 @@ export default function HospitalStaffDashboard() {
                     updated_at: comm.updated_at || new Date().toISOString(),
                     sent_to_hospital_at: comm.sent_to_hospital_at,
                     hospital_ready_at: comm.hospital_ready_at,
+                    doctors_ready: comm.doctors_ready || false,
+                    nurses_ready: comm.nurses_ready || false,
+                    equipment_ready: comm.equipment_ready || false,
+                    bed_ready: comm.bed_ready || false,
+                    blood_available: comm.blood_available || false,
+                    hospital_preparation_notes: comm.hospital_preparation_notes || "",
                     originalData: comm // Keep original data for reference
                 }
 
@@ -262,11 +290,17 @@ export default function HospitalStaffDashboard() {
 
         } catch (error) {
             console.error('Failed to fetch hospital communications from database:', error)
-            setAllCommunications([])
-            setHospitalCommunications([])
+            // Don't clear existing communications on error, just log it
+            console.log('DEBUG - Keeping existing communications due to error')
+
+            // Update stats to reflect current state
+            const activeComms = hospitalCommunications.filter(c =>
+                !['failed', 'cancelled', 'completed'].includes(c.status)
+            ).length
+
             setStats(prev => ({
                 ...prev,
-                pendingCommunications: 0
+                pendingCommunications: activeComms
             }))
         }
     }
@@ -393,27 +427,19 @@ export default function HospitalStaffDashboard() {
         setShowPreparationModal(true)
     }
 
-    // Handle acknowledge submission - UPDATED FOR HOSPITAL_STAFF ROLE
+    // Handle acknowledge submission - SIMPLIFIED VERSION
     const handleAcknowledge = async (e) => {
         e.preventDefault()
         try {
-            // Get current user info from auth context
-            const currentUserId = user?.id
-
-            if (!currentUserId) {
-                throw new Error('Unable to identify user. Please ensure you are logged in properly.')
-            }
-
             console.log('DEBUG - Acknowledging communication:', {
                 communicationId: selectedCommunication.id,
-                acknowledgedBy: currentUserId,
-                userRole: user?.role, // Debug user role
+                userRole: user?.role,
                 preparationNotes: acknowledgeData.preparation_notes
             })
 
-            // Prepare acknowledge data
+            // Prepare acknowledge data - send both acknowledged_by and preparation_notes
             const acknowledgePayload = {
-                acknowledged_by: currentUserId,
+                acknowledged_by: user?.id, // Send user ID
                 preparation_notes: acknowledgeData.preparation_notes || "Hospital acknowledged the emergency alert"
             }
 
@@ -446,7 +472,7 @@ export default function HospitalStaffDashboard() {
                 console.error('Error response status:', error.response.status)
 
                 if (error.response.status === 403) {
-                    errorMessage = 'Permission denied. Your account does not have permission to acknowledge communications. Please ensure your account has the hospital_staff role.'
+                    errorMessage = 'Permission denied. Your account does not have permission to acknowledge communications. Please ensure your account has the hospital_staff role and is properly authenticated.'
                 } else if (error.response.status === 404) {
                     errorMessage = 'Acknowledge endpoint not found. Please contact support.'
                 } else if (error.response.status === 400) {
@@ -473,26 +499,73 @@ export default function HospitalStaffDashboard() {
             alert(errorMessage)
         }
     }
-    // Handle preparation update submission
+
+    // Handle preparation update submission - IMPROVED VERSION
     const handlePreparationUpdate = async (e) => {
         e.preventDefault()
         try {
+            console.log('DEBUG - Updating preparation for communication:', {
+                communicationId: selectedCommunication.id,
+                userRole: user?.role,
+                userHospital: user?.hospital,
+                preparationData: preparationData
+            })
+
             // Update preparation status in database using your Django API
-            const response = await apiClient.post(`/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`,
+            const response = await apiClient.post(
+                `/hospital-comms/api/communications/${selectedCommunication.id}/update-preparation/`,
                 preparationData
             )
+
+            console.log('DEBUG - Preparation update response:', response)
 
             // Refresh communications from database
             await fetchHospitalCommunications()
             setShowPreparationModal(false)
             setSelectedCommunication(null)
 
+            // Show success message
+            alert('Preparation status updated successfully! The first aider has been notified.')
+
         } catch (error) {
             console.error('Failed to update preparation:', error)
-            alert('Failed to update preparation status. Please try again.')
+
+            let errorMessage = 'Failed to update preparation status. Please try again.'
+
+            if (error.response) {
+                console.error('Error response data:', error.response.data)
+                console.error('Error response status:', error.response.status)
+
+                if (error.response.status === 403) {
+                    errorMessage = 'Permission denied. Your account does not have permission to update preparation status. Please ensure your account has the hospital_staff role and is properly authenticated.'
+                } else if (error.response.status === 404) {
+                    errorMessage = 'Update preparation endpoint not found. Please contact support.'
+                } else if (error.response.status === 400) {
+                    const errorData = error.response.data
+                    if (typeof errorData === 'object') {
+                        const validationErrors = Object.entries(errorData)
+                            .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+                            .join('; ')
+                        errorMessage = `Validation error: ${validationErrors}`
+                    } else {
+                        errorMessage = `Invalid data: ${errorData}`
+                    }
+                } else if (error.response.status === 500) {
+                    errorMessage = 'Server error occurred. Please try again later.'
+                } else {
+                    errorMessage = `Server error: ${error.response.status} - ${error.response.statusText}`
+                }
+            } else if (error.request) {
+                errorMessage = 'Network error: Unable to connect to server. Please check your internet connection.'
+            } else {
+                errorMessage = `Error: ${error.message}`
+            }
+
+            alert(errorMessage)
         }
     }
 
+    
     // Handle input changes
     const handleAcknowledgeInputChange = (e) => {
         const { name, value } = e.target
@@ -871,7 +944,7 @@ export default function HospitalStaffDashboard() {
                                             >
                                                 <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-3 gap-2">
                                                     <div className="flex-1">
-                                                        <h3 className="font-semibold text-[#1a0000] break-words">{patient.name}</h3>
+                                                        <h3 className="font-semibold text-[#1a0000] wrap-break-word">{patient.name}</h3>
                                                         <p className="text-sm text-[#740000]">{patient.age} years old</p>
                                                     </div>
                                                     <span
@@ -881,7 +954,7 @@ export default function HospitalStaffDashboard() {
                                                     </span>
                                                 </div>
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between text-sm gap-1">
-                                                    <span className="text-[#740000] break-words">Condition: {patient.condition}</span>
+                                                    <span className="text-[#740000] wrap-break-word">Condition: {patient.condition}</span>
                                                     <span className="text-[#740000] whitespace-nowrap">Admitted {patient.admittedAt}</span>
                                                 </div>
                                             </div>
@@ -902,7 +975,7 @@ export default function HospitalStaffDashboard() {
                                     Call First-Aider
                                 </button>
                                 <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
-                                    <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                                    <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
                                     Report Emergency
                                 </button>
                                 <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
