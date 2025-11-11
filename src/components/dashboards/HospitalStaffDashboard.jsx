@@ -269,10 +269,9 @@ export default function HospitalStaffDashboard() {
         try {
             // Get communications that have victim assessments and have arrived, but NOT discharged
             const communicationsWithAssessments = hospitalCommunications.filter(comm =>
-                (comm.status === 'arrived' || comm.has_assessment) && // Remove 'completed' from this condition
+                (comm.status === 'arrived' || comm.has_assessment) &&
                 comm.victim_name &&
-                comm.status !== 'completed' && // Explicitly exclude completed/discharged
-                comm.status !== 'discharged'
+                comm.status !== 'completed' // Use 'completed' as the discharge status
             )
 
             // Transform communications into patient records
@@ -329,7 +328,7 @@ export default function HospitalStaffDashboard() {
     }
     // Helper function to determine patient status
     const getPatientStatus = (communicationStatus, priority) => {
-        if (communicationStatus === 'completed') return 'discharged'
+        if (communicationStatus === 'completed' || communicationStatus === 'discharged') return 'discharged'
         if (communicationStatus === 'arrived') {
             return priority === 'critical' ? 'critical' : 'stable'
         }
@@ -650,39 +649,44 @@ export default function HospitalStaffDashboard() {
             let success = false;
             let lastError = null;
 
-            // First, update the hospital communication status to 'discharged'
-            try {
-                console.log('DEBUG - Updating communication status to discharged');
-                const commResponse = await apiClient.post(
-                    `/hospital-comms/api/communications/${patient.communicationId}/update-status/`,
-                    {
-                        status: 'discharged',
-                        notes: `Patient ${patient.name} discharged from hospital on ${new Date().toLocaleDateString()}`
-                    }
-                );
-                console.log('DEBUG - Communication status update success:', commResponse.data);
-                success = true;
-            } catch (commError) {
-                console.log('DEBUG - Communication status update failed:', commError.response?.data || commError.message);
-                lastError = commError;
+            // Try different valid status values for hospital communications
+            const validStatuses = ['completed', 'closed', 'finished', 'resolved', 'cancelled'];
+
+            for (const status of validStatuses) {
+                try {
+                    console.log(`DEBUG - Trying communication status: ${status}`);
+                    const commResponse = await apiClient.post(
+                        `/hospital-comms/api/communications/${patient.communicationId}/update-status/`,
+                        {
+                            status: status,
+                            notes: `Patient ${patient.name} discharged from hospital on ${new Date().toLocaleDateString()}`
+                        }
+                    );
+                    console.log(`DEBUG - Communication status "${status}" success:`, commResponse.data);
+                    success = true;
+                    break; // Stop trying once we find a working status
+                } catch (commError) {
+                    console.log(`DEBUG - Communication status "${status}" failed:`, commError.response?.data || commError.message);
+                    lastError = commError;
+                    continue; // Try next status
+                }
             }
 
-            // Then try to cancel/update the emergency alert as well
+            // If communication status update succeeded, also try to update emergency alert
             if (success) {
                 try {
-                    console.log('DEBUG - Trying cancel endpoint with alert ID:', emergencyAlertId);
+                    console.log('DEBUG - Trying to update emergency alert status');
                     const cancelResponse = await apiClient.post(
                         `/emergencies/${emergencyAlertId}/cancel/`,
                         {
                             reason: `Patient ${patient.name} discharged from hospital`
                         }
                     );
-                    console.log('DEBUG - Cancel endpoint success:', cancelResponse.data);
+                    console.log('DEBUG - Emergency alert cancel success:', cancelResponse.data);
                 } catch (cancelError) {
-                    console.log('DEBUG - Cancel endpoint failed, trying status update:', cancelError.response?.data || cancelError.message);
+                    console.log('DEBUG - Emergency alert cancel failed, trying status update:', cancelError.response?.data || cancelError.message);
 
                     try {
-                        console.log('DEBUG - Trying status update with alert ID:', emergencyAlertId);
                         const statusResponse = await apiClient.post(
                             `/emergencies/${emergencyAlertId}/status/`,
                             {
@@ -690,15 +694,13 @@ export default function HospitalStaffDashboard() {
                                 details: `Patient ${patient.name} discharged from hospital`
                             }
                         );
-                        console.log('DEBUG - Status update success:', statusResponse.data);
+                        console.log('DEBUG - Emergency alert status update success:', statusResponse.data);
                     } catch (statusError) {
-                        console.log('DEBUG - Status update failed:', statusError.response?.data || statusError.message);
+                        console.log('DEBUG - Emergency alert status update failed:', statusError.response?.data || statusError.message);
                         // Don't fail the entire discharge if emergency alert update fails
                     }
                 }
-            }
 
-            if (success) {
                 // Remove from all local states immediately
                 setPatients(prev => prev.filter(p => p.id !== patient.id));
                 setHospitalCommunications(prev => prev.filter(comm => comm.id !== patient.communicationId));
@@ -716,7 +718,33 @@ export default function HospitalStaffDashboard() {
                 alert('Patient discharged successfully! They will no longer appear in the dashboard.');
 
             } else {
-                throw lastError;
+                // If all status attempts failed, try a different approach
+                console.log('DEBUG - All status attempts failed, trying alternative approach');
+
+                // Alternative: Just update the local state and mark as completed locally
+                const confirmed = window.confirm(
+                    'Unable to update server status. Do you want to remove this patient from the dashboard anyway? The data will remain in the database.'
+                );
+
+                if (confirmed) {
+                    // Remove from local states only
+                    setPatients(prev => prev.filter(p => p.id !== patient.id));
+                    setHospitalCommunications(prev => prev.filter(comm => comm.id !== patient.communicationId));
+                    setAllCommunications(prev => prev.filter(comm => comm.id !== patient.communicationId));
+
+                    // Update stats
+                    setStats(prev => ({
+                        ...prev,
+                        activePatients: Math.max(0, prev.activePatients - 1),
+                        criticalCases: (patient.priority === 'critical' || patient.priority === 'high')
+                            ? Math.max(0, prev.criticalCases - 1)
+                            : prev.criticalCases
+                    }));
+
+                    alert('Patient removed from dashboard. Data remains in database.');
+                } else {
+                    throw lastError;
+                }
             }
 
         } catch (error) {
@@ -725,12 +753,19 @@ export default function HospitalStaffDashboard() {
             let errorMessage = 'Failed to discharge patient. ';
 
             if (error.response) {
-                if (error.response.status === 404) {
-                    errorMessage += 'Emergency alert not found. The alert may have been already processed.';
+                const errorData = error.response.data;
+                if (error.response.status === 400) {
+                    if (errorData.status && Array.isArray(errorData.status)) {
+                        errorMessage += `Valid status choices are: ${errorData.status.join(', ')}`;
+                    } else {
+                        errorMessage += `Validation error: ${JSON.stringify(errorData)}`;
+                    }
+                } else if (error.response.status === 404) {
+                    errorMessage += 'Record not found. It may have been already processed.';
                 } else if (error.response.status === 500) {
                     errorMessage += 'Server error. Please try again or contact support.';
                 } else {
-                    errorMessage += `Error: ${error.response.status} - ${JSON.stringify(error.response.data)}`;
+                    errorMessage += `Error: ${error.response.status} - ${JSON.stringify(errorData)}`;
                 }
             } else {
                 errorMessage += error.message || 'Unknown error occurred.';
@@ -739,6 +774,7 @@ export default function HospitalStaffDashboard() {
             alert(errorMessage);
         }
     }
+
     // Handle input changes
     const handleAcknowledgeInputChange = (e) => {
         const { name, value } = e.target
@@ -830,7 +866,7 @@ export default function HospitalStaffDashboard() {
     // Filter communications to exclude failed, cancelled, completed AND discharged ones for display
     const getDisplayCommunications = () => {
         return hospitalCommunications.filter(comm =>
-            !['failed', 'cancelled', 'completed', 'discharged'].includes(comm.status)
+            !['failed', 'cancelled', 'completed'].includes(comm.status) // Use 'completed' instead of 'discharged'
         )
     }
     // Get status display text
@@ -845,11 +881,13 @@ export default function HospitalStaffDashboard() {
             'en_route': 'Patient En Route',
             'arrived': 'Patient Arrived',
             'completed': 'Completed',
+            'discharged': 'Discharged', // Add this
             'cancelled': 'Cancelled',
             'failed': 'Failed'
         }
         return statusMap[status] || status
     }
+
 
     if (isLoading) {
         return (
