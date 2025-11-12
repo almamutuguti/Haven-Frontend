@@ -1,4 +1,3 @@
-// src/components/Notifications.jsx
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Bell, X, AlertCircle, Stethoscope, User, Activity, Radio, Shield, Ambulance, Heart, Search, ExternalLink } from "lucide-react"

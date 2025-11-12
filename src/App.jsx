@@ -2,6 +2,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AuthProvider } from "./components/context/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import LandingPage from "./components/LandingPage"
+import Features from "./components/Features"
+import About from "./components/About"
+import Contact from "./components/Contact"
 import HospitalStaffDashboard from "./components/dashboards/HospitalStaffDashboard"
 import FirstAiderDashboard from "./components/dashboards/FirstAiderDashboard"
 import AdminDashboard from "./components/dashboards/AdminDashboard"
@@ -25,6 +28,11 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          
+          {/* Public Pages */}
+          <Route path="/features" element={<Features />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
           
           {/* Hospital Staff Routes */}
           <Route

@@ -1,4 +1,4 @@
-// src/components/SideBar.jsx
+
 "use client"
 import { useState, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"

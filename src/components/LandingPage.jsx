@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "./context/AuthContext"
 import { AlertCircle, Heart, Users, Shield, AlertTriangle } from "lucide-react"
+import { Link } from "react-router-dom"
+
 
 export default function LandingPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -32,12 +34,12 @@ export default function LandingPage() {
     const fetchData = async () => {
       try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
-        
+
         const [hospitalsRes, organizationsRes] = await Promise.all([
           fetch(`${API_BASE_URL}/accounts/api/hospitals/`),
           fetch(`${API_BASE_URL}/accounts/api/organizations/`)
         ])
-        
+
         if (hospitalsRes.ok) {
           const hospitalsData = await hospitalsRes.json()
           console.log('Fetched hospitals:', hospitalsData)
@@ -46,7 +48,7 @@ export default function LandingPage() {
           console.error('Failed to fetch hospitals:', hospitalsRes.status)
           setHospitals([])
         }
-        
+
         if (organizationsRes.ok) {
           const organizationsData = await organizationsRes.json()
           console.log('Fetched organizations:', organizationsData)
@@ -62,7 +64,7 @@ export default function LandingPage() {
         setFormError("Failed to load hospitals and organizations. Please refresh the page.")
       }
     }
-    
+
     fetchData()
   }, [])
 
@@ -75,14 +77,14 @@ export default function LandingPage() {
   const handleGetStarted = () => {
     setIsLogin(false)
     setFormError(null)
-    setFormData({ 
-      email: "", 
+    setFormData({
+      email: "",
       password: "",
-      password_confirm: "", 
-      first_name: "", 
+      password_confirm: "",
+      first_name: "",
       last_name: "",
-      username: "", 
-      phone: "", 
+      username: "",
+      phone: "",
       role: "hospital_staff",
       hospital_id: "",
       organization_id: ""
@@ -96,18 +98,18 @@ export default function LandingPage() {
     e.preventDefault()
     setIsSubmitting(true)
     setFormError(null)
-    
+
     try {
       if (isLogin) {
         const userData = await login(formData.email, formData.password)
         const userRole = userData?.role || user?.role || formData.role
-        
+
         const roleMap = {
           hospital_staff: "/dashboard/hospital_staff",
           first_aider: "/dashboard/first_aider",
           system_admin: "/dashboard/system_admin",
         }
-        
+
         const redirectPath = roleMap[userRole] || "/dashboard/"
         navigate(redirectPath)
       } else {
@@ -134,9 +136,9 @@ export default function LandingPage() {
           hospital_id: formData.hospital_id ? String(formData.hospital_id) : null,
           organization_id: formData.organization_id ? String(formData.organization_id) : null
         }
-        
+
         await register(
-          registrationData.email, 
+          registrationData.email,
           registrationData.password,
           registrationData.password_confirm,
           registrationData.first_name,
@@ -147,16 +149,16 @@ export default function LandingPage() {
           registrationData.hospital_id,
           registrationData.organization_id
         )
-        
+
         alert("Registration successful! Please login with your credentials.")
         setIsLogin(true)
-        setFormData(prev => ({ 
-          ...prev, 
+        setFormData(prev => ({
+          ...prev,
           password: "",
           password_confirm: "",
-          first_name: "", 
+          first_name: "",
           last_name: "",
-          username: "", 
+          username: "",
           phone: "",
           hospital_id: "",
           organization_id: ""
@@ -182,19 +184,18 @@ export default function LandingPage() {
             <span className="text-2xl font-bold text-[#b90000]">Haven</span>
           </div>
           <div className="hidden md:flex gap-8">
-            <a href="#features" className="text-[#1a0000] hover:text-[#b90000] transition">
+            <Link to="/features" className="text-[#1a0000] hover:text-[#b90000] transition">
               Features
-            </a>
-            <a href="#about" className="text-[#1a0000] hover:text-[#b90000] transition">
+            </Link>
+            <Link to="/about" className="text-[#1a0000] hover:text-[#b90000] transition">
               About
-            </a>
-            <a href="#contact" className="text-[#1a0000] hover:text-[#b90000] transition">
+            </Link>
+            <Link to="/contact" className="text-[#1a0000] hover:text-[#b90000] transition">
               Contact
-            </a>
+            </Link>
           </div>
         </div>
       </nav>
-
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
@@ -215,7 +216,10 @@ export default function LandingPage() {
               >
                 Get Started
               </button>
-              <button className="px-8 py-3 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded-lg font-semibold transition-colors">
+              <button
+                onClick={() => navigate('/about')}
+                className="px-8 py-3 border border-[#b90000] text-[#b90000] hover:bg-[#ffe6c5] rounded-lg font-semibold transition-colors"
+              >
                 Learn More
               </button>
             </div>
@@ -304,7 +308,7 @@ export default function LandingPage() {
                   <p className="text-sm text-red-700">{formError}</p>
                 </div>
               )}
-              
+
               {!isLogin && (hospitals.length === 0 || organizations.length === 0) && (
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                   <p className="text-sm text-yellow-700">
@@ -389,7 +393,7 @@ export default function LandingPage() {
                         <option value="first_aider">First-Aider</option>
                       </select>
                     </div>
-                    
+
                     {/* Hospital Selection for Hospital Staff */}
                     {formData.role === "hospital_staff" && (
                       <div className="space-y-2">
@@ -512,13 +516,13 @@ export default function LandingPage() {
                     setIsLogin(!isLogin)
                     setFormError(null)
                     if (!isLogin) {
-                      setFormData(prev => ({ 
-                        ...prev, 
+                      setFormData(prev => ({
+                        ...prev,
                         password: "",
                         password_confirm: "",
-                        first_name: "", 
+                        first_name: "",
                         last_name: "",
-                        username: "", 
+                        username: "",
                         phone: "",
                         hospital_id: "",
                         organization_id: ""
@@ -535,92 +539,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="border-t border-[#ffe6c5] bg-[#fff3ea]/50 mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-[#b90000] rounded-lg flex items-center justify-center">
-                  <Heart className="w-5 h-5 text-[#fff3ea]" />
-                </div>
-                <span className="font-bold text-[#b90000]">Haven</span>
+          <div className="text-center">
+            <div className="flex items-center gap-2 justify-center mb-4">
+              <div className="w-8 h-8 bg-[#b90000] rounded-lg flex items-center justify-center">
+                <Heart className="w-5 h-5 text-[#fff3ea]" />
               </div>
-              <p className="text-sm text-[#740000]">Emergency response coordination platform</p>
+              <span className="font-bold text-[#b90000] text-xl">Haven</span>
             </div>
-            <div>
-              <h4 className="font-semibold text-[#1a0000] mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-[#740000]">
-                <li>
-                  <a href="#features" className="hover:text-[#b90000] transition">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
-                    Security
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-[#1a0000] mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-[#740000]">
-                <li>
-                  <a href="#about" className="hover:text-[#b90000] transition">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#contact" className="hover:text-[#b90000] transition">
-                    Contact
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-[#1a0000] mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-[#740000]">
-                <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
-                    Privacy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
-                    Terms
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-[#b90000] transition">
-                    Cookies
-                  </a>
-                </li>
-              </ul>
+            <p className="text-[#740000] mb-6">Emergency response coordination platform</p>
+            <div className="flex gap-6 justify-center">
+              <Link to="/" className="text-[#740000] hover:text-[#b90000] transition">Home</Link>
+              <Link to="/features" className="text-[#740000] hover:text-[#b90000] transition">Features</Link>
+              <Link to="/about" className="text-[#740000] hover:text-[#b90000] transition">About</Link>
+              <Link to="/contact" className="text-[#740000] hover:text-[#b90000] transition">Contact</Link>
             </div>
           </div>
-          <div className="border-t border-[#ffe6c5] pt-8 flex flex-col md:flex-row justify-between items-center">
+          <div className="border-t border-[#ffe6c5] pt-8 text-center">
             <p className="text-sm text-[#740000]">© 2025 Haven. All rights reserved.</p>
-            <div className="flex gap-6 mt-4 md:mt-0">
-              <a href="#" className="text-[#740000] hover:text-[#b90000] transition">
-                Twitter
-              </a>
-              <a href="#" className="text-[#740000] hover:text-[#b90000] transition">
-                LinkedIn
-              </a>
-              <a href="#" className="text-[#740000] hover:text-[#b90000] transition">
-                GitHub
-              </a>
-            </div>
           </div>
         </div>
       </footer>
