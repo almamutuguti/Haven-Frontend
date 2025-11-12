@@ -672,7 +672,7 @@ export default function FirstAiderDashboard() {
         }
     }
 
-    // Fetch hospital communications for this first aider - ENHANCED VERSION
+    // Fetch hospital communications for this first aider - FILTERED VERSION
     const fetchHospitalCommunications = async () => {
         try {
             console.log('DEBUG - Fetching hospital communications...')
@@ -711,12 +711,6 @@ export default function FirstAiderDashboard() {
 
                 console.log('DEBUG - Raw communications:', communications);
 
-                // Log the structure of the first communication to understand the field names
-                if (communications.length > 0) {
-                    console.log('DEBUG - First communication structure:', communications[0]);
-                    console.log('DEBUG - Available keys in first communication:', Object.keys(communications[0]));
-                }
-
                 // Filter communications by first_aider - handle different field names
                 const filteredCommunications = communications.filter(comm => {
                     // Try different possible field names for first aider ID
@@ -748,8 +742,18 @@ export default function FirstAiderDashboard() {
 
             console.log('DEBUG - Final communications data:', communications);
 
+            // FILTER OUT FAILED COMMUNICATIONS
+            const successfulCommunications = communications.filter(comm => {
+                const status = comm.status || comm.communication_status;
+                // Define what you consider "failed" statuses
+                const failedStatuses = ['failed', 'cancelled', 'rejected', 'error'];
+                return !failedStatuses.includes(status);
+            });
+
+            console.log(`DEBUG - Filtered out failed communications. Original: ${communications.length}, After filter: ${successfulCommunications.length}`);
+
             // Ensure we have proper hospital names for display
-            const formattedCommunications = communications.map(comm => {
+            const formattedCommunications = successfulCommunications.map(comm => {
                 let hospitalName = comm.hospital_name;
 
                 // If no hospital name, try to get it from hospitals list or API
@@ -795,7 +799,7 @@ export default function FirstAiderDashboard() {
             console.log('DEBUG - Formatted communications:', formattedCommunications)
             setHospitalCommunications(formattedCommunications)
 
-            // Update stats
+            // Update stats - only count active successful communications
             const activeComms = formattedCommunications.filter(c =>
                 ['sent', 'acknowledged', 'preparing', 'ready', 'en_route'].includes(c.status)
             ).length
@@ -818,6 +822,8 @@ export default function FirstAiderDashboard() {
             console.log('Hospital communications fetch failed, using empty data')
         }
     }
+
+    
     // Fetch emergency history for victims data
     const fetchEmergencyHistory = async () => {
         try {
@@ -1304,7 +1310,93 @@ export default function FirstAiderDashboard() {
         return priorityMap[condition] || "Medium"
     }
 
-    // Update the handleVictimAssessment function to send notification
+    // Updated function that uses your existing add_assessment endpoint
+    const sendAssessmentToHospital = async (assessmentData, communicationId) => {
+        try {
+            console.log('Sending assessment data to hospital communication:', communicationId)
+
+            // Prepare assessment data in the format your backend expects
+            const assessmentPayload = {
+                // Personal Information
+                victim_name: `${assessmentData.victimInfo.firstName} ${assessmentData.victimInfo.lastName}`,
+                victim_age: assessmentData.victimInfo.age,
+                victim_gender: assessmentData.victimInfo.gender,
+                contact_number: assessmentData.victimInfo.contactNumber,
+
+                // Vital Signs
+                heart_rate: assessmentData.vitalSigns.heartRate,
+                blood_pressure: assessmentData.vitalSigns.bloodPressure,
+                temperature: assessmentData.vitalSigns.temperature,
+                respiratory_rate: assessmentData.vitalSigns.respiratoryRate,
+                oxygen_saturation: assessmentData.vitalSigns.oxygenSaturation,
+                gcs_eyes: parseInt(assessmentData.vitalSigns.gcsScore?.split('+')[0]?.trim()) || null,
+                gcs_verbal: parseInt(assessmentData.vitalSigns.gcsScore?.split('+')[1]?.trim()) || null,
+                gcs_motor: parseInt(assessmentData.vitalSigns.gcsScore?.split('+')[2]?.trim()) || null,
+                blood_glucose: assessmentData.vitalSigns.bloodGlucose,
+
+                // Symptoms & Injuries
+                symptoms: assessmentData.symptoms.join(', '),
+                injuries: assessmentData.injuries.join(', '),
+                pain_level: assessmentData.pain.level,
+                pain_location: assessmentData.pain.location,
+
+                // Medical Information
+                medications: assessmentData.medicalInfo.medications,
+                allergies: assessmentData.medicalInfo.allergies,
+                medical_history: assessmentData.medicalInfo.medicalHistory,
+                last_meal: assessmentData.medicalInfo.lastMeal,
+
+                // Assessment
+                condition: assessmentData.assessment.condition,
+                consciousness: assessmentData.assessment.consciousness,
+                breathing: assessmentData.assessment.breathing,
+                circulation: assessmentData.assessment.circulation,
+                triage_category: assessmentData.assessment.triage,
+
+                // Treatment
+                treatment_provided: assessmentData.treatment.provided,
+                medications_administered: assessmentData.treatment.medications,
+
+                // Notes & Recommendations
+                notes: assessmentData.notes,
+                recommendations: assessmentData.recommendations,
+
+                // Additional fields your backend might expect
+                injury_mechanism: assessmentData.injuryMechanism || '',
+                assessment_summary: `Assessment completed for ${assessmentData.victimInfo.firstName} ${assessmentData.victimInfo.lastName}. Condition: ${assessmentData.assessment.condition}`
+            };
+
+            console.log('Sending assessment payload:', assessmentPayload);
+
+            // Use your existing add_assessment endpoint
+            const response = await apiClient.post(
+                `/hospital-comms/api/communications/${communicationId}/add-assessment/`,
+                assessmentPayload
+            );
+
+            console.log('Assessment data sent to hospital successfully:', response.data);
+            return response.data;
+
+        } catch (error) {
+            console.error('Failed to send assessment to hospital:', error);
+
+            // Enhanced error handling
+            if (error.response) {
+                console.error('Error response:', error.response.data);
+                console.error('Error status:', error.response.status);
+
+                if (error.response.status === 400) {
+                    throw new Error(`Validation error: ${JSON.stringify(error.response.data)}`);
+                } else if (error.response.status === 403) {
+                    throw new Error('Permission denied. You cannot add assessments to this communication.');
+                } else if (error.response.status === 404) {
+                    throw new Error('Communication not found.');
+                }
+            }
+
+            throw new Error(`Failed to send assessment: ${error.message}`);
+        }
+    }
     const handleVictimAssessment = async (e) => {
         e.preventDefault()
         setIsSubmitting(true)
@@ -1315,9 +1407,66 @@ export default function FirstAiderDashboard() {
             const summary = generateAssessmentSummary(victimAssessment, selectedVictim)
             setAssessmentSummary(summary)
 
-            console.log('🩺 Starting victim assessment process...')
+            console.log('Starting victim assessment process...')
 
-            // Update local state
+            // Calculate GCS score properly
+            const gcsEyes = parseInt(victimAssessment.gcs_eyes) || 0;
+            const gcsVerbal = parseInt(victimAssessment.gcs_verbal) || 0;
+            const gcsMotor = parseInt(victimAssessment.gcs_motor) || 0;
+            const gcsTotal = gcsEyes + gcsVerbal + gcsMotor;
+
+            // Prepare assessment data for storage - matching your backend model
+            const assessmentData = {
+                victimInfo: {
+                    firstName: victimAssessment.firstName,
+                    lastName: victimAssessment.lastName,
+                    age: victimAssessment.age,
+                    gender: victimAssessment.gender,
+                    contactNumber: victimAssessment.contactNumber
+                },
+                vitalSigns: {
+                    heartRate: victimAssessment.heartRate,
+                    bloodPressure: victimAssessment.bloodPressure,
+                    temperature: victimAssessment.temperature,
+                    respiratoryRate: victimAssessment.respiratoryRate,
+                    oxygenSaturation: victimAssessment.oxygenSaturation,
+                    gcsEyes: gcsEyes,
+                    gcsVerbal: gcsVerbal,
+                    gcsMotor: gcsMotor,
+                    gcsTotal: gcsTotal,
+                    bloodGlucose: victimAssessment.bloodGlucose
+                },
+                symptoms: victimAssessment.symptoms,
+                injuries: victimAssessment.injuries,
+                pain: {
+                    level: victimAssessment.painLevel,
+                    location: victimAssessment.painLocation
+                },
+                medicalInfo: {
+                    medications: victimAssessment.medications,
+                    allergies: victimAssessment.allergies,
+                    medicalHistory: victimAssessment.medicalHistory,
+                    lastMeal: victimAssessment.lastMeal
+                },
+                assessment: {
+                    condition: victimAssessment.condition,
+                    consciousness: victimAssessment.consciousness,
+                    breathing: victimAssessment.breathing,
+                    circulation: victimAssessment.circulation,
+                    triage: victimAssessment.triage_category
+                },
+                treatment: {
+                    provided: victimAssessment.treatmentProvided,
+                    medications: victimAssessment.medicationsAdministered
+                },
+                notes: victimAssessment.notes,
+                recommendations: victimAssessment.recommendations,
+                priority: getPriorityFromCondition(victimAssessment.condition),
+                timestamp: new Date().toISOString(),
+                firstAider: getFirstAiderInfo()
+            }
+
+            // Update local state with detailed assessment data
             if (selectedVictim) {
                 setVictims(prev => prev.map(victim =>
                     victim.id === selectedVictim.id
@@ -1332,13 +1481,12 @@ export default function FirstAiderDashboard() {
                             status: victimAssessment.condition,
                             hasAssessment: true,
                             assessmentSummary: summary,
+                            assessmentData: assessmentData,
                             localAssessment: {
                                 ...victimAssessment,
                                 timestamp: new Date().toISOString()
                             },
-                            // Add emergency name for differentiation
                             emergencyName: selectedAssignment?.type || `Emergency-${Date.now()}`,
-                            // Mark if attended
                             attended: victimAssessment.condition === 'stable' || victimAssessment.condition === 'recovering'
                         }
                         : victim
@@ -1357,6 +1505,7 @@ export default function FirstAiderDashboard() {
                     status: victimAssessment.condition,
                     hasAssessment: true,
                     assessmentSummary: summary,
+                    assessmentData: assessmentData,
                     localAssessment: {
                         ...victimAssessment,
                         timestamp: new Date().toISOString()
@@ -1367,28 +1516,47 @@ export default function FirstAiderDashboard() {
                 setVictims(prev => [...prev, newVictim])
             }
 
-            // Send notification to hospital if there's an active communication
+            // Send assessment to hospital if there's an active communication
             const activeCommunication = hospitalCommunications.find(
                 comm => comm.emergency_alert_id === selectedVictim?.id &&
                     ['sent', 'acknowledged', 'preparing'].includes(comm.status)
             )
 
             if (activeCommunication) {
-                await sendAssessmentNotification(summary, activeCommunication.id, activeCommunication.hospital_id)
+                try {
+                    console.log('Found active communication for assessment:', activeCommunication.id);
+                    const result = await sendAssessmentToHospital(assessmentData, activeCommunication.id)
+
+                    // Send notification
+                    await sendAssessmentNotification(summary, activeCommunication.id, activeCommunication.hospital_id)
+                    setFormSuccess("Victim assessment completed successfully! Hospital has been notified and assessment saved.")
+
+                } catch (assessmentError) {
+                    console.error('Failed to send assessment to hospital:', assessmentError);
+                    // Store locally as fallback
+                    const localAssessmentKey = `assessment_${activeCommunication.id}`;
+                    localStorage.setItem(localAssessmentKey, JSON.stringify({
+                        assessment_data: assessmentData,
+                        timestamp: new Date().toISOString(),
+                        communication_id: activeCommunication.id
+                    }));
+
+                    setFormSuccess("Victim assessment completed! (Stored locally - Could not send to hospital API)");
+                }
+            } else {
+                setFormSuccess("Victim assessment completed successfully! (No active communication found for this victim)");
             }
 
             setShowVictimAssessmentForm(false)
             setShowAssessmentSummary(true)
-            setFormSuccess("Victim assessment completed successfully! Hospital has been notified.")
 
         } catch (error) {
             console.error('Victim assessment failed:', error)
-            setFormError("Failed to complete victim assessment. Please try again.")
+            setFormError(`Failed to complete victim assessment: ${error.message}`)
         } finally {
             setIsSubmitting(false)
         }
     }
-
 
     // View assessment summary
     const handleViewAssessmentSummary = (victim) => {
@@ -3154,31 +3322,59 @@ export default function FirstAiderDashboard() {
                     </div>
                 )}
 
-                {/* Assessment Summary Modal */}
+
                 {showAssessmentSummary && assessmentSummary && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                         <div className="bg-[#fff3ea] border border-[#ffe6c5] rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                             <div className="flex items-center justify-between p-6 border-b border-[#ffe6c5] sticky top-0 bg-[#fff3ea] z-10">
                                 <h2 className="text-2xl font-bold text-[#1a0000]">Assessment Summary</h2>
-                                <button
-                                    onClick={() => setShowAssessmentSummary(false)}
-                                    className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
-                                >
-                                    <X className="w-5 h-5 text-[#1a0000]" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${assessmentSummary.priority === "High"
+                                        ? "bg-[#b90000]/10 text-[#b90000] border border-[#b90000]/20"
+                                        : "bg-[#740000]/10 text-[#740000] border border-[#740000]/20"
+                                        }`}>
+                                        {assessmentSummary.priority} Priority
+                                    </span>
+                                    <button
+                                        onClick={() => setShowAssessmentSummary(false)}
+                                        className="p-2 hover:bg-[#ffe6c5] rounded-lg transition-colors"
+                                    >
+                                        <X className="w-5 h-5 text-[#1a0000]" />
+                                    </button>
+                                </div>
                             </div>
                             <div className="p-6 space-y-6">
-                                {/* Header */}
+                                {/* Enhanced Header */}
                                 <div className="bg-[#ffe6c5] p-4 rounded-lg">
-                                    <h3 className="text-xl font-bold text-[#1a0000]">{assessmentSummary.victimName}</h3>
-                                    <p className="text-[#740000]">Assessment completed: {assessmentSummary.timestamp}</p>
-                                    <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-2 ${assessmentSummary.priority === "High"
-                                        ? "bg-[#b90000]/10 text-[#b90000] border border-[#b90000]/20"
-                                        : assessmentSummary.priority === "Medium"
-                                            ? "bg-[#740000]/10 text-[#740000] border border-[#740000]/20"
-                                            : "bg-[#1a0000]/10 text-[#1a0000] border border-[#1a0000]/20"
-                                        }`}>
-                                        Priority: {assessmentSummary.priority}
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h3 className="text-xl font-bold text-[#1a0000]">{assessmentSummary.victimName}</h3>
+                                            <p className="text-[#740000]">Assessment completed: {assessmentSummary.timestamp}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm text-[#740000]">First Aider: {userProfile?.first_name} {userProfile?.last_name}</p>
+                                            <p className="text-sm text-[#740000]">Organization: {userProfile?.organization?.name || userProfile?.organization}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Quick Overview */}
+                                <div className="grid md:grid-cols-4 gap-4">
+                                    <div className="text-center p-3 bg-white rounded-lg border border-[#ffe6c5]">
+                                        <p className="text-sm text-[#740000]">Condition</p>
+                                        <p className="text-lg font-bold text-[#1a0000] capitalize">{assessmentSummary.assessment.condition}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-white rounded-lg border border-[#ffe6c5]">
+                                        <p className="text-sm text-[#740000]">Triage</p>
+                                        <p className="text-lg font-bold text-[#1a0000] capitalize">{assessmentSummary.assessment.triage}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-white rounded-lg border border-[#ffe6c5]">
+                                        <p className="text-sm text-[#740000]">GCS Score</p>
+                                        <p className="text-lg font-bold text-[#1a0000]">{assessmentSummary.vitalSigns.gcsScore || 'N/A'}</p>
+                                    </div>
+                                    <div className="text-center p-3 bg-white rounded-lg border border-[#ffe6c5]">
+                                        <p className="text-sm text-[#740000]">Priority</p>
+                                        <p className="text-lg font-bold text-[#1a0000]">{assessmentSummary.priority}</p>
                                     </div>
                                 </div>
 
@@ -3186,15 +3382,15 @@ export default function FirstAiderDashboard() {
                                 <div>
                                     <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Personal Information</h4>
                                     <div className="grid md:grid-cols-3 gap-4 text-sm">
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Age:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.age || 'Not specified'}</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Gender:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.gender || 'Not specified'}</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Contact:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.personalInfo.contactNumber || 'Not specified'}</p>
                                         </div>
@@ -3205,29 +3401,29 @@ export default function FirstAiderDashboard() {
                                 <div>
                                     <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Vital Signs</h4>
                                     <div className="grid md:grid-cols-3 gap-4 text-sm">
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Heart Rate:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.heartRate || 'N/A'} bpm</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Blood Pressure:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.bloodPressure || 'N/A'}</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Temperature:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.temperature || 'N/A'} °C</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Respiratory Rate:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.respiratoryRate || 'N/A'}</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Oxygen Saturation:</span>
                                             <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.oxygenSaturation || 'N/A'}%</p>
                                         </div>
-                                        <div>
-                                            <span className="text-[#740000]">GCS Score:</span>
-                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.gcsScore || 'N/A'}</p>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                            <span className="text-[#740000]">Blood Glucose:</span>
+                                            <p className="text-[#1a0000] font-medium">{assessmentSummary.vitalSigns.bloodGlucose || 'N/A'} mg/dL</p>
                                         </div>
                                     </div>
                                 </div>
@@ -3236,92 +3432,161 @@ export default function FirstAiderDashboard() {
                                 <div className="grid md:grid-cols-2 gap-6">
                                     <div>
                                         <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Symptoms</h4>
-                                        {assessmentSummary.symptoms.length > 0 ? (
-                                            <ul className="list-disc list-inside text-sm text-[#1a0000] space-y-1">
-                                                {assessmentSummary.symptoms.map((symptom, index) => (
-                                                    <li key={index}>{symptom}</li>
-                                                ))}
-                                            </ul>
-                                        ) : (
-                                            <p className="text-sm text-[#740000]">No symptoms reported</p>
-                                        )}
+                                        <div className="bg-white p-4 rounded-lg border border-[#ffe6c5]">
+                                            {assessmentSummary.symptoms.length > 0 ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {assessmentSummary.symptoms.map((symptom, index) => (
+                                                        <span key={index} className="px-3 py-1 bg-[#ffe6c5] text-[#1a0000] rounded-full text-sm">
+                                                            {symptom}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-[#740000]">No symptoms reported</p>
+                                            )}
+                                        </div>
                                     </div>
                                     <div>
                                         <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Injuries</h4>
-                                        {assessmentSummary.injuries.length > 0 ? (
-                                            <ul className="list-disc list-inside text-sm text-[#1a0000] space-y-1">
-                                                {assessmentSummary.injuries.map((injury, index) => (
-                                                    <li key={index}>{injury}</li>
-                                                ))}
-                                            </ul>
-                                        ) : (
-                                            <p className="text-sm text-[#740000]">No injuries reported</p>
-                                        )}
+                                        <div className="bg-white p-4 rounded-lg border border-[#ffe6c5]">
+                                            {assessmentSummary.injuries.length > 0 ? (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {assessmentSummary.injuries.map((injury, index) => (
+                                                        <span key={index} className="px-3 py-1 bg-[#ffe6c5] text-[#1a0000] rounded-full text-sm">
+                                                            {injury}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-[#740000]">No injuries reported</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Assessment */}
+                                {/* Pain Assessment */}
+                                {(assessmentSummary.pain.level || assessmentSummary.pain.location) && (
+                                    <div>
+                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Pain Assessment</h4>
+                                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                                            {assessmentSummary.pain.level && (
+                                                <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                                    <span className="text-[#740000]">Pain Level:</span>
+                                                    <p className="text-[#1a0000] font-medium">{assessmentSummary.pain.level}</p>
+                                                </div>
+                                            )}
+                                            {assessmentSummary.pain.location && (
+                                                <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                                    <span className="text-[#740000]">Pain Location:</span>
+                                                    <p className="text-[#1a0000] font-medium">{assessmentSummary.pain.location}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Medical Information */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Medical Information</h4>
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            {assessmentSummary.medicalInfo.medications && (
+                                                <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                                    <span className="text-[#740000] text-sm font-medium">Current Medications:</span>
+                                                    <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.medicalInfo.medications}</p>
+                                                </div>
+                                            )}
+                                            {assessmentSummary.medicalInfo.allergies && (
+                                                <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                                    <span className="text-[#740000] text-sm font-medium">Allergies:</span>
+                                                    <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.medicalInfo.allergies}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="space-y-4">
+                                            {assessmentSummary.medicalInfo.medicalHistory && (
+                                                <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                                    <span className="text-[#740000] text-sm font-medium">Medical History:</span>
+                                                    <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.medicalInfo.medicalHistory}</p>
+                                                </div>
+                                            )}
+                                            {assessmentSummary.medicalInfo.lastMeal && (
+                                                <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                                    <span className="text-[#740000] text-sm font-medium">Last Meal:</span>
+                                                    <p className="text-[#1a0000]">{assessmentSummary.medicalInfo.lastMeal}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Clinical Assessment */}
                                 <div>
                                     <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Clinical Assessment</h4>
                                     <div className="grid md:grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                            <span className="text-[#740000]">Condition:</span>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                            <span className="text-[#740000]">Overall Condition:</span>
                                             <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.condition}</p>
                                         </div>
-                                        <div>
-                                            <span className="text-[#740000]">Consciousness:</span>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
+                                            <span className="text-[#740000]">Consciousness Level:</span>
                                             <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.consciousness}</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Breathing:</span>
                                             <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.breathing}</p>
                                         </div>
-                                        <div>
+                                        <div className="bg-white p-3 rounded-lg border border-[#ffe6c5]">
                                             <span className="text-[#740000]">Circulation:</span>
                                             <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.circulation}</p>
                                         </div>
-                                        <div>
-                                            <span className="text-[#740000]">Triage Category:</span>
-                                            <p className="text-[#1a0000] font-medium capitalize">{assessmentSummary.assessment.triage}</p>
-                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Treatment & Notes */}
-                                <div className="grid md:grid-cols-2 gap-6">
-                                    <div>
-                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Treatment Provided</h4>
-                                        <p className="text-sm text-[#1a0000] whitespace-pre-wrap">
-                                            {assessmentSummary.treatment.provided || 'No treatment documented'}
-                                        </p>
-                                        {assessmentSummary.treatment.medications && (
-                                            <div className="mt-2">
-                                                <span className="text-[#740000] text-sm">Medications:</span>
-                                                <p className="text-sm text-[#1a0000] whitespace-pre-wrap">
-                                                    {assessmentSummary.treatment.medications}
-                                                </p>
+                                {/* Treatment Provided */}
+                                <div>
+                                    <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Treatment Provided</h4>
+                                    <div className="bg-white p-4 rounded-lg border border-[#ffe6c5]">
+                                        {assessmentSummary.treatment.provided ? (
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <span className="text-[#740000] text-sm font-medium">First Aid & Treatment:</span>
+                                                    <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.treatment.provided}</p>
+                                                </div>
+                                                {assessmentSummary.treatment.medications && (
+                                                    <div>
+                                                        <span className="text-[#740000] text-sm font-medium">Medications Administered:</span>
+                                                        <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.treatment.medications}</p>
+                                                    </div>
+                                                )}
                                             </div>
+                                        ) : (
+                                            <p className="text-sm text-[#740000]">No treatment documented</p>
                                         )}
                                     </div>
-                                    <div>
-                                        <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Notes & Recommendations</h4>
-                                        <div className="space-y-2">
-                                            {assessmentSummary.notes && (
-                                                <div>
-                                                    <span className="text-[#740000] text-sm">Notes:</span>
-                                                    <p className="text-sm text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.notes}</p>
-                                                </div>
-                                            )}
-                                            {assessmentSummary.recommendations && (
-                                                <div>
-                                                    <span className="text-[#740000] text-sm">Recommendations:</span>
-                                                    <p className="text-sm text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.recommendations}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
 
+                                {/* Notes & Recommendations */}
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    {assessmentSummary.notes && (
+                                        <div>
+                                            <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Assessment Notes</h4>
+                                            <div className="bg-white p-4 rounded-lg border border-[#ffe6c5]">
+                                                <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.notes}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {assessmentSummary.recommendations && (
+                                        <div>
+                                            <h4 className="text-lg font-semibold text-[#1a0000] mb-3">Recommendations</h4>
+                                            <div className="bg-white p-4 rounded-lg border border-[#ffe6c5]">
+                                                <p className="text-[#1a0000] whitespace-pre-wrap">{assessmentSummary.recommendations}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Action Buttons */}
                                 <div className="flex gap-4 pt-6 border-t border-[#ffe6c5] sticky bottom-0 bg-[#fff3ea] pb-2">
                                     <button
                                         onClick={() => setShowAssessmentSummary(false)}
@@ -3338,12 +3603,20 @@ export default function FirstAiderDashboard() {
                                     >
                                         Send to Hospital
                                     </button>
+                                    <button
+                                        onClick={() => {
+                                            // Print or save assessment
+                                            window.print();
+                                        }}
+                                        className="flex-1 px-4 py-2 bg-[#1a0000] hover:bg-[#740000] text-[#fff3ea] rounded-lg font-medium transition-colors"
+                                    >
+                                        Print Assessment
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 )}
-
                 {/* Hospital Communication Modal */}
                 {showHospitalCommunicationForm && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
