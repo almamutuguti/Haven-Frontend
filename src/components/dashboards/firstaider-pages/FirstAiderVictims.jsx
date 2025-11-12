@@ -169,6 +169,8 @@ export default function FirstAiderVictims() {
       const userData = localStorage.getItem('haven_user');
       if (userData) {
         const profile = JSON.parse(userData);
+        console.log('User profile:', profile); // Debug log
+        console.log('Organization data:', profile.organization); // Debug log
         setUserProfile(profile);
         return profile;
       }
@@ -177,6 +179,32 @@ export default function FirstAiderVictims() {
       console.error('Failed to fetch user profile:', error);
       return null;
     }
+  }
+
+  // Helper function to get organization name
+  const getOrganizationName = () => {
+    if (!userProfile) return '';
+    
+    // Check if organization is an object with name property
+    if (userProfile.organization && typeof userProfile.organization === 'object') {
+      return userProfile.organization.name || userProfile.organization;
+    }
+    
+    // If organization is a string, return it directly
+    if (typeof userProfile.organization === 'string') {
+      return userProfile.organization;
+    }
+    
+    // Check other possible organization fields
+    if (userProfile.organization_name) {
+      return userProfile.organization_name;
+    }
+    
+    if (userProfile.org_name) {
+      return userProfile.org_name;
+    }
+    
+    return 'Not specified';
   }
 
   // Fetch hospitals
@@ -246,7 +274,7 @@ export default function FirstAiderVictims() {
         id: userProfile.id || userProfile.user_id || `temp-${Date.now()}`,
         name: `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'First Aider',
         contact: userProfile.phone_number || userProfile.contact_number || '',
-        organization: userProfile.organization?.name || userProfile.organization || '',
+        organization: getOrganizationName(), // Use the helper function here
         badge_number: userProfile.badge_number || userProfile.employee_id || '',
         role: userRole
       }
@@ -618,7 +646,7 @@ export default function FirstAiderVictims() {
             <p className="text-[#740000]">Manage victim assessments and medical information</p>
             <p className="text-[#740000] text-sm mt-1">
               Welcome back, {userProfile?.first_name || 'First Aider'}! 
-              {userProfile?.organization && ` Organization: ${userProfile.organization}`}
+              {getOrganizationName() && ` Organization: ${getOrganizationName()}`}
             </p>
           </div>
 
@@ -820,8 +848,7 @@ export default function FirstAiderVictims() {
                 </div>
               </div>
 
-              {/* Rest of the assessment form (similar to dashboard) */}
-              {/* Due to length, I'm including the key sections. You can copy the full form from your dashboard */}
+              {/* Rest of the assessment form would go here */}
 
               <div className="flex gap-4 pt-6 border-t border-[#ffe6c5] sticky bottom-0 bg-[#fff3ea] pb-2">
                 <button
@@ -866,12 +893,14 @@ export default function FirstAiderVictims() {
               </div>
             </div>
             <div className="p-6 space-y-6">
-              {/* Summary content similar to dashboard */}
+              {/* Summary content */}
               <div className="bg-[#ffe6c5] p-4 rounded-lg">
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-xl font-bold text-[#1a0000]">{assessmentSummary.victimName}</h3>
                     <p className="text-[#740000]">Assessment completed: {assessmentSummary.timestamp}</p>
+                    <p className="text-[#740000] text-sm">First Aider: {userProfile?.first_name} {userProfile?.last_name}</p>
+                    <p className="text-[#740000] text-sm">Organization: {getOrganizationName()}</p>
                   </div>
                 </div>
               </div>
@@ -922,6 +951,33 @@ export default function FirstAiderVictims() {
               {formSuccess && (
                 <div className="p-3 bg-green-100 border border-green-400 rounded text-green-700 text-sm">
                   {formSuccess}
+                </div>
+              )}
+
+              {/* First Aider Information Display */}
+              {userProfile && (
+                <div className="bg-[#ffe6c5] p-4 rounded-lg mb-4">
+                  <h4 className="font-semibold text-[#1a0000] mb-2">First Aider Information</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-[#740000]">Name:</span>
+                      <p className="text-[#1a0000] font-medium">
+                        {userProfile.first_name} {userProfile.last_name}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[#740000]">Organization:</span>
+                      <p className="text-[#1a0000] font-medium">
+                        {getOrganizationName()}
+                      </p>
+                    </div>
+                    {userProfile.phone_number && (
+                      <div>
+                        <span className="text-[#740000]">Contact:</span>
+                        <p className="text-[#1a0000] font-medium">{userProfile.phone_number}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
