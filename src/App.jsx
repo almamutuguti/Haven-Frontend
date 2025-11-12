@@ -8,6 +8,10 @@ import AdminDashboard from "./components/dashboards/AdminDashboard"
 import CPRInstructions from "./components/dashboards/documents/CprInstructions"
 import WoundCare from "./components/dashboards/documents/WoundCare"
 import ShockManagement from "./components/dashboards/documents/ShockManagement"
+import Patients from "./components/dashboards/hospitalstaff-pages/Patients"
+import Incidents from "./components/dashboards/hospitalstaff-pages/Incidents"
+import Reports from "./components/dashboards/hospitalstaff-pages/Reports"
+import Settings from "./components/dashboards/hospitalstaff-pages/Settings"
 
 function App() {
   return (
@@ -15,14 +19,50 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          
+          {/* Hospital Staff Routes */}
           <Route
-            path="/dashboard/hospital_staff"
+            path="/dashboard/hospital-staff"
             element={
               <ProtectedRoute role="hospital_staff">
                 <HospitalStaffDashboard />
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/dashboard/hospital-staff/patients"
+            element={
+              <ProtectedRoute role="hospital_staff">
+                <Patients />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/hospital-staff/incidents"
+            element={
+              <ProtectedRoute role="hospital_staff">
+                <Incidents />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/hospital-staff/reports"
+            element={
+              <ProtectedRoute role="hospital_staff">
+                <Reports />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/hospital-staff/settings"
+            element={
+              <ProtectedRoute role="hospital_staff">
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* First Aider Routes */}
           <Route
             path="/dashboard/first_aider"
             element={
@@ -31,6 +71,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Admin Routes */}
           <Route
             path="/dashboard/system_admin"
             element={
@@ -39,6 +81,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+
           {/* Guidance Pages - Accessible to all authenticated users */}
           <Route
             path="/documents/cpr"
@@ -64,6 +107,9 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Redirects */}
+          <Route path="/dashboard/hospital_staff" element={<Navigate to="/dashboard/hospital-staff" replace />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AuthProvider>
@@ -72,20 +118,3 @@ function App() {
 }
 
 export default App
-
-// This code sets up the main application structure using React Router.
-// It includes routes for the landing page and different dashboards for hospital staff, first-aiders, and administrators.
-// The `ProtectedRoute` component ensures that only users with the appropriate roles can access their respective dashboards.
-// If a user tries to access a route they are not authorized for, they will be redirected to the landing page.
-// The `AuthProvider` wraps the application to provide authentication context, allowing components to access user information and authentication methods.
-// The application uses a clean and responsive design, leveraging React Router for navigation and role-based access control.
-// The `ProtectedRoute` component checks the user's role and redirects them if they are not authorized to view the page.
-// The application is structured to be scalable, allowing for easy addition of new features and pages in the future.
-// The use of React Router's `Navigate` component simplifies redirection logic, ensuring a smooth user experience.
-// The application is ready for deployment, with a focus on security and user authentication.
-// The code is modular, making it easy to maintain and extend as needed.
-// It follows best practices for React development, ensuring a robust and efficient application structure.
-// The application is designed to be user-friendly, with clear navigation and role-specific content.
-// It can be easily integrated with a backend API for user authentication and data management.
-// The use of React's context API allows for efficient state management across the application.
-// The application is built with scalability in mind, allowing for future enhancements and features.

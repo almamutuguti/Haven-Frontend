@@ -1,10 +1,9 @@
-// Incidents.jsx
 "use client"
 import { useState, useEffect } from "react"
-import { Sidebar } from "../../../SideBar"
+import { Sidebar } from "../../SideBar"
 import { History, AlertCircle, Clock, MapPin, User, X, CheckCircle } from "lucide-react"
-import { apiClient } from "../../utils/api"
-import { useAuth } from " ../../../context/AuthContext"
+import { apiClient } from "../../../utils/api"
+import { useAuth } from "../../context/AuthContext"
 
 export default function Incidents() {
     const [incidents, setIncidents] = useState([])

@@ -1,9 +1,9 @@
 "use client"
 import { useState, useEffect } from "react"
-import { Sidebar } from "../../../SideBar"
+import { Sidebar } from "../../SideBar"
 import { Users, Eye, X, CheckCircle, AlertCircle, Stethoscope, User, Activity } from "lucide-react"
-import { apiClient } from "../../utils/api"
-import { useAuth } from "../../../context/AuthContext"
+import { apiClient } from "../../../utils/api"
+import { useAuth } from "../../context/AuthContext"
 
 export default function Patients() {
     const [patients, setPatients] = useState([])
