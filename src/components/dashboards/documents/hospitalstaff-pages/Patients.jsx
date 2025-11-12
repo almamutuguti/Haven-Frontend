@@ -1,4 +1,3 @@
-// Patients.jsx
 "use client"
 import { useState, useEffect } from "react"
 import { Sidebar } from "../../../SideBar"
