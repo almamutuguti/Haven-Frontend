@@ -1,7 +1,7 @@
 "use client"
 
 import { Sidebar } from "../SideBar"
-import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X, RefreshCw, Stethoscope, Eye, User, Heart, FileText } from "lucide-react"
+import { Users, AlertCircle, Clock, TrendingUp, Plus, MapPin, Phone, Activity, MessageCircle, CheckCircle, Building, Ambulance, X, RefreshCw, Stethoscope, Eye, User, Heart, FileText, Construction } from "lucide-react"
 import { useState, useEffect } from "react"
 import { apiClient } from "../../utils/api"
 import { useAuth } from "../context/AuthContext"
@@ -31,6 +31,9 @@ export default function HospitalStaffDashboard() {
         hospital_preparation_notes: ""
     })
 
+    // Notification states
+    const [notification, setNotification] = useState({ show: false, message: '', type: '' })
+
     // Stats
     const [stats, setStats] = useState({
         activePatients: 0,
@@ -39,6 +42,14 @@ export default function HospitalStaffDashboard() {
         activeIncidents: 0,
         totalAssessments: 0
     })
+
+    // Show notification
+    const showNotification = (message, type = 'success') => {
+        setNotification({ show: true, message, type })
+        setTimeout(() => {
+            setNotification({ show: false, message: '', type: '' })
+        }, 5000)
+    }
 
     // Initialize current hospital based on user's registered hospital
     useEffect(() => {
@@ -369,8 +380,10 @@ export default function HospitalStaffDashboard() {
                 fetchHospitalCommunications(),
                 fetchPatients()
             ])
+            showNotification('Data refreshed successfully!', 'success')
         } catch (error) {
             console.error('Error refreshing data:', error)
+            showNotification('Failed to refresh data. Please try again.', 'error')
         } finally {
             setIsRefreshing(false)
         }
@@ -410,7 +423,7 @@ export default function HospitalStaffDashboard() {
                         className="px-4 py-2 bg-[#b90000] hover:bg-[#740000] disabled:bg-[#740000]/50 text-[#fff3ea] rounded text-sm font-medium transition-colors flex items-center gap-2"
                     >
                         <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                        {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
                     </button>
                 </div>
             </div>
@@ -480,7 +493,7 @@ export default function HospitalStaffDashboard() {
             setSelectedCommunication(null)
             setAcknowledgeData({ preparation_notes: "" })
 
-            alert('Emergency alert acknowledged successfully! The first aider has been notified.')
+            showNotification('Emergency alert acknowledged successfully! The first aider has been notified.', 'success')
 
         } catch (error) {
             console.error('Failed to acknowledge communication:', error)
@@ -515,7 +528,7 @@ export default function HospitalStaffDashboard() {
                 errorMessage = `Error: ${error.message}`
             }
 
-            alert(errorMessage)
+            showNotification(errorMessage, 'error')
         }
     }
 
@@ -541,7 +554,7 @@ export default function HospitalStaffDashboard() {
             setShowPreparationModal(false)
             setSelectedCommunication(null)
 
-            alert('Preparation status updated successfully! The first aider has been notified.')
+            showNotification('Preparation status updated successfully! The first aider has been notified.', 'success')
 
         } catch (error) {
             console.error('Failed to update preparation:', error)
@@ -576,7 +589,7 @@ export default function HospitalStaffDashboard() {
                 errorMessage = `Error: ${error.message}`
             }
 
-            alert(errorMessage)
+            showNotification(errorMessage, 'error')
         }
     }
 
@@ -612,11 +625,11 @@ export default function HospitalStaffDashboard() {
                 hospital_communication_id: communication.id
             });
 
-            alert('Patient arrival recorded successfully! First aider has been notified.');
+            showNotification('Patient arrival recorded successfully! First aider has been notified.', 'success');
 
         } catch (error) {
             console.error('Failed to update patient arrival:', error);
-            alert('Failed to record patient arrival. Please try again.');
+            showNotification('Failed to record patient arrival. Please try again.', 'error');
         }
     }
 
@@ -706,7 +719,7 @@ export default function HospitalStaffDashboard() {
                         : prev.criticalCases
                 }));
 
-                alert('Patient discharged successfully! They will no longer appear in the dashboard.');
+                showNotification('Patient discharged successfully! They will no longer appear in the dashboard.', 'success');
 
             } else {
                 console.log('DEBUG - All status attempts failed, trying alternative approach');
@@ -727,7 +740,7 @@ export default function HospitalStaffDashboard() {
                             : prev.criticalCases
                     }));
 
-                    alert('Patient removed from dashboard. Data remains in database.');
+                    showNotification('Patient removed from dashboard. Data remains in database.', 'info');
                 } else {
                     throw lastError;
                 }
@@ -756,7 +769,7 @@ export default function HospitalStaffDashboard() {
                 errorMessage += error.message || 'Unknown error occurred.';
             }
 
-            alert(errorMessage);
+            showNotification(errorMessage, 'error');
         }
     }
 
@@ -856,6 +869,48 @@ export default function HospitalStaffDashboard() {
         return 'None reported'
     }
 
+    // Create assessment summary for patient cards
+    const createAssessmentSummary = (patient) => {
+        if (!patient.hasAssessment || !patient.assessmentData) {
+            return 'No assessment available';
+        }
+
+        const assessment = patient.assessmentData;
+        const summaryParts = [];
+
+        // Add chief complaint
+        if (patient.condition && patient.condition !== 'Emergency condition') {
+            summaryParts.push(patient.condition);
+        }
+
+        // Add main symptoms
+        if (assessment.symptoms && assessment.symptoms.length > 0) {
+            const mainSymptoms = assessment.symptoms.slice(0, 2);
+            summaryParts.push(`Symptoms: ${mainSymptoms.join(', ')}`);
+        }
+
+        // Add main injuries
+        if (assessment.injuries && assessment.injuries.length > 0) {
+            const mainInjuries = assessment.injuries.slice(0, 2);
+            summaryParts.push(`Injuries: ${mainInjuries.join(', ')}`);
+        }
+
+        // Add vital signs summary
+        if (assessment.vitalSigns) {
+            const vitals = assessment.vitalSigns;
+            const vitalParts = [];
+            if (vitals.heartRate) vitalParts.push(`HR: ${vitals.heartRate}`);
+            if (vitals.bloodPressure) vitalParts.push(`BP: ${vitals.bloodPressure}`);
+            if (vitals.oxygenSaturation) vitalParts.push(`SpO2: ${vitals.oxygenSaturation}%`);
+            
+            if (vitalParts.length > 0) {
+                summaryParts.push(`Vitals: ${vitalParts.join(', ')}`);
+            }
+        }
+
+        return summaryParts.length > 0 ? summaryParts.join(' • ') : 'Assessment data available';
+    }
+
     // Filter communications to exclude failed, cancelled, completed AND discharged ones for display
     const getDisplayCommunications = () => {
         return hospitalCommunications.filter(comm =>
@@ -903,6 +958,36 @@ export default function HospitalStaffDashboard() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#fff3ea] via-[#fff3ea] to-[#ffe6c5]">
             <Sidebar />
+
+            {/* Notification System */}
+            {notification.show && (
+                <div className={`fixed top-4 right-4 z-50 max-w-sm w-full p-4 rounded-lg shadow-lg border ${
+                    notification.type === 'error' 
+                        ? 'bg-red-50 border-red-200 text-red-800' 
+                        : notification.type === 'info'
+                        ? 'bg-blue-50 border-blue-200 text-blue-800'
+                        : 'bg-green-50 border-green-200 text-green-800'
+                }`}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            {notification.type === 'error' ? (
+                                <AlertCircle className="w-5 h-5 mr-2" />
+                            ) : notification.type === 'info' ? (
+                                <AlertCircle className="w-5 h-5 mr-2" />
+                            ) : (
+                                <CheckCircle className="w-5 h-5 mr-2" />
+                            )}
+                            <p className="text-sm font-medium">{notification.message}</p>
+                        </div>
+                        <button
+                            onClick={() => setNotification({ show: false, message: '', type: '' })}
+                            className="ml-4 text-gray-400 hover:text-gray-600"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <main className="ml-64 px-4 sm:px-6 lg:px-8 py-8">
                 {/* Page Title */}
@@ -1196,10 +1281,14 @@ export default function HospitalStaffDashboard() {
                                                         <p className="text-sm text-[#740000]">
                                                             {patient.age} years old • {patient.gender}
                                                         </p>
+                                                        <div className="text-xs text-[#b90000] mt-1 bg-[#b90000]/10 px-2 py-1 rounded inline-block">
+                                                            Emergency ID: {patient.emergencyAlertId || 'N/A'}
+                                                        </div>
                                                         {patient.hasAssessment && (
-                                                            <div className="flex items-center gap-1 mt-1">
-                                                                <Stethoscope className="w-3 h-3 text-[#b90000]" />
-                                                                <span className="text-xs text-[#b90000]">Assessment Available</span>
+                                                            <div className="mt-2">
+                                                                <p className="text-xs text-[#1a0000] bg-[#ffe6c5] p-2 rounded">
+                                                                    <strong>Assessment Summary:</strong> {createAssessmentSummary(patient)}
+                                                                </p>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1267,24 +1356,34 @@ export default function HospitalStaffDashboard() {
                                 <h3 className="text-lg sm:text-xl font-bold text-[#1a0000]">Quick Actions</h3>
                             </div>
                             <div className="p-4 sm:p-6 space-y-2">
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
-                                    <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
-                                    Call First-Aider
-                                </button>
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
-                                    <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
-                                    Report Emergency
-                                </button>
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base">
-                                    <Users className="w-4 h-4 mr-2 flex-shrink-0" />
-                                    View Team
-                                </button>
+                                <div className="relative group">
+                                    <button 
+                                        className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base cursor-not-allowed opacity-50"
+                                        disabled
+                                    >
+                                        <Phone className="w-4 h-4 mr-2 flex-shrink-0" />
+                                        Call First-Aider
+                                    </button>
+                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-4 py-3 bg-white border border-[#b90000] rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 min-w-[280px]">
+                                        <div className="flex items-start gap-3">
+                                            <Construction className="w-5 h-5 text-[#b90000] flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <h4 className="font-semibold text-[#b90000] text-sm mb-1">Feature Under Development</h4>
+                                                <p className="text-[#1a0000] text-xs">
+                                                    The call first-aider functionality is currently being developed and will be available in the next update.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-8 border-transparent border-t-white"></div>
+                                    </div>
+                                </div>
                                 <button
                                     onClick={refreshCommunications}
-                                    className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base"
+                                    disabled={isRefreshing}
+                                    className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors flex items-center text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <RefreshCw className="w-4 h-4 mr-2 flex-shrink-0" />
-                                    Refresh Data
+                                    <RefreshCw className={`w-4 h-4 mr-2 flex-shrink-0 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                    {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
                                 </button>
                             </div>
                         </div>
@@ -1534,6 +1633,9 @@ export default function HospitalStaffDashboard() {
                                             <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(selectedPatient.priority)}`}>
                                                 {selectedPatient.priority?.toUpperCase() || 'MEDIUM'}
                                             </span>
+                                        </div>
+                                        <div className="text-xs text-[#b90000] mt-2 bg-[#b90000]/10 px-2 py-1 rounded inline-block">
+                                            Emergency ID: {selectedPatient.emergencyAlertId || 'N/A'}
                                         </div>
                                     </div>
                                     <div className="text-right">

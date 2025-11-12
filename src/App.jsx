@@ -5,6 +5,9 @@ import LandingPage from "./components/LandingPage"
 import HospitalStaffDashboard from "./components/dashboards/HospitalStaffDashboard"
 import FirstAiderDashboard from "./components/dashboards/FirstAiderDashboard"
 import AdminDashboard from "./components/dashboards/AdminDashboard"
+import CPRInstructions from "./components/dashboards/documents/CprInstructions"
+import WoundCare from "./components/dashboards/documents/WoundCare"
+import ShockManagement from "./components/dashboards/documents/ShockManagement"
 
 function App() {
   return (
@@ -36,6 +39,31 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* Guidance Pages - Accessible to all authenticated users */}
+          <Route
+            path="/documents/cpr"
+            element={
+              <ProtectedRoute>
+                <CPRInstructions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/documents/wound-care"
+            element={
+              <ProtectedRoute>
+                <WoundCare />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/documents/shock-management"
+            element={
+              <ProtectedRoute>
+                <ShockManagement />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </AuthProvider>
@@ -44,6 +72,7 @@ function App() {
 }
 
 export default App
+
 // This code sets up the main application structure using React Router.
 // It includes routes for the landing page and different dashboards for hospital staff, first-aiders, and administrators.
 // The `ProtectedRoute` component ensures that only users with the appropriate roles can access their respective dashboards.

@@ -1,11 +1,11 @@
-// Sidebar.jsx - Updated version with responsive design and better notifications
+// Sidebar.jsx - Updated version for Hospital Staff
 "use client"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import { 
   Menu, X, LogOut, Home, Users, BarChart3, AlertCircle, 
   FileText, Settings, ChevronDown, Activity, MapPin, Shield, 
-  Bell, Stethoscope, User
+  Bell, Stethoscope, User, History
 } from "lucide-react"
 import { useAuth } from "./context/AuthContext"
 import { apiClient } from "../utils/api"
@@ -39,35 +39,13 @@ export function Sidebar() {
       const response = await apiClient.get('/notifications/api/notifications/')
       const allNotifications = response.data || []
       
-      // Filter notifications based on user role
-      let filteredNotifications = []
-      
-      switch (user?.role) {
-        case "hospital_staff":
-          filteredNotifications = allNotifications.filter(notification => 
-            notification.notification_type === 'hospital_assignment' ||
-            notification.notification_type === 'patient_arrived' ||
-            notification.notification_type === 'hospital_ready' ||
-            notification.notification_type === 'system_alert'
-          )
-          break
-        case "first_aider":
-          filteredNotifications = allNotifications.filter(notification => 
-            notification.notification_type === 'first_aider_dispatch' ||
-            notification.notification_type === 'emergency_alert' ||
-            notification.notification_type === 'eta_update' ||
-            notification.notification_type === 'system_alert'
-          )
-          break
-        case "admin":
-          filteredNotifications = allNotifications.filter(notification => 
-            notification.notification_type === 'system_alert' ||
-            notification.notification_type === 'emergency_alert'
-          )
-          break
-        default:
-          filteredNotifications = allNotifications
-      }
+      // Filter notifications for hospital staff
+      const filteredNotifications = allNotifications.filter(notification => 
+        notification.notification_type === 'hospital_assignment' ||
+        notification.notification_type === 'patient_arrived' ||
+        notification.notification_type === 'hospital_ready' ||
+        notification.notification_type === 'system_alert'
+      )
       
       setNotifications(filteredNotifications)
       setUnreadCount(filteredNotifications.filter(n => !n.read_at)?.length || 0)
@@ -111,34 +89,16 @@ export function Sidebar() {
   }
 
   const getNavItems = () => {
-    switch (user?.role) {
-      case "hospital_staff":
-        return [
-          { icon: Home, label: "Dashboard", href: "/dashboard/hospital-staff" },
-          { icon: Users, label: "Patients", href: "/dashboard/hospital-staff/patients" },
-          { icon: AlertCircle, label: "Incidents", href: "/dashboard/hospital-staff/incidents" },
-          { icon: Activity, label: "Reports", href: "/dashboard/hospital-staff/reports" },
-          { icon: Settings, label: "Settings", href: "/dashboard/hospital-staff/settings" },
-        ]
-      case "first_aider":
-        return [
-          { icon: Home, label: "Dashboard", href: "/dashboard/first-aider" },
-          { icon: MapPin, label: "Assignments", href: "/dashboard/first-aider/assignments" },
-          { icon: AlertCircle, label: "Incidents", href: "/dashboard/first-aider/incidents" },
-          { icon: Activity, label: "Guidance", href: "/dashboard/first-aider/guidance" },
-          { icon: Settings, label: "Settings", href: "/dashboard/first-aider/settings" },
-        ]
-      case "admin":
-        return [
-          { icon: Home, label: "Dashboard", href: "/dashboard/admin" },
-          { icon: Users, label: "User Management", href: "/dashboard/admin/users" },
-          { icon: BarChart3, label: "Analytics", href: "/dashboard/admin/analytics" },
-          { icon: Shield, label: "System Health", href: "/dashboard/admin/system-health" },
-          { icon: Settings, label: "Settings", href: "/dashboard/admin/settings" },
-        ]
-      default:
-        return []
+    if (user?.role === "hospital_staff") {
+      return [
+        { icon: Home, label: "Dashboard", href: "/dashboard/hospital-staff" },
+        { icon: Users, label: "Patients", href: "/dashboard/hospital-staff/patients" },
+        { icon: History, label: "Incidents", href: "/dashboard/hospital-staff/incidents" },
+        { icon: Activity, label: "Reports", href: "/dashboard/hospital-staff/reports" },
+        { icon: Settings, label: "Settings", href: "/dashboard/hospital-staff/settings" },
+      ]
     }
+    return []
   }
 
   const navItems = getNavItems()
@@ -149,13 +109,8 @@ export function Sidebar() {
       case 'hospital_assignment':
       case 'hospital_ready':
         return Stethoscope
-      case 'first_aider_dispatch':
-      case 'emergency_alert':
-        return AlertCircle
       case 'patient_arrived':
         return User
-      case 'eta_update':
-        return Activity
       case 'system_alert':
         return Shield
       default:
@@ -317,9 +272,9 @@ export function Sidebar() {
         <div className="border-t border-[#ffe6c5] p-4 space-y-4">
           {!isCollapsed && (
             <div className="px-2">
-              <p className="text-xs font-semibold text-[#740000] uppercase">Logged in as</p>
+              <p className="text-xs font-semibold text-[#740000] uppercase">Hospital Staff</p>
               <p className="text-sm font-medium text-[#1a0000] truncate">{user?.email}</p>
-              <p className="text-xs text-[#740000] capitalize">{user?.role?.replace("_", " ")}</p>
+              <p className="text-xs text-[#740000] capitalize">{user?.hospital?.name || 'Hospital'}</p>
             </div>
           )}
           

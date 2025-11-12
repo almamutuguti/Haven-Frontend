@@ -5,10 +5,11 @@ import { Sidebar } from "../SideBar"
 import {
     Heart, Phone, AlertCircle, MapPin, Navigation, Radio, Clock,
     Plus, CheckCircle, AlertTriangle, X, Send, Compass, User,
-    Map, FileText, Stethoscope, Upload, Link, Eye, Calendar,
+    Map, FileText, Stethoscope, Upload, Eye, Calendar,
     MessageCircle, Building, Ambulance
 } from "lucide-react"
 import { apiClient } from "../../utils/api"
+import { Link } from "react-router-dom"
 
 export default function FirstAiderDashboard() {
     const [assignments, setAssignments] = useState([])
@@ -823,7 +824,7 @@ export default function FirstAiderDashboard() {
         }
     }
 
-    
+
     // Fetch emergency history for victims data
     const fetchEmergencyHistory = async () => {
         try {
@@ -2516,6 +2517,7 @@ export default function FirstAiderDashboard() {
                             </div>
                         </div>
 
+
                         {/* Quick Guidance */}
                         <div className="border border-[#ffe6c5] bg-[#fff3ea] rounded-lg">
                             <div className="p-6 border-b border-[#ffe6c5]">
@@ -2525,15 +2527,24 @@ export default function FirstAiderDashboard() {
                                 </h3>
                             </div>
                             <div className="p-6 space-y-2">
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors">
+                                <Link
+                                    to="/documents/cpr"
+                                    className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors block"
+                                >
                                     CPR Instructions
-                                </button>
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors">
+                                </Link>
+                                <Link
+                                    to="/documents/wound-care"
+                                    className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors block"
+                                >
                                     Wound Care
-                                </button>
-                                <button className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors">
+                                </Link>
+                                <Link
+                                    to="/documents/shock-management"
+                                    className="w-full text-left px-3 py-2 border border-[#ffe6c5] text-[#1a0000] hover:bg-[#ffe6c5] rounded transition-colors block"
+                                >
                                     Shock Management
-                                </button>
+                                </Link>
                             </div>
                         </div>
                     </div>
