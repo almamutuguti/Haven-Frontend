@@ -101,7 +101,7 @@ export function Sidebar() {
         return [
           { icon: Home, label: "Dashboard", href: "/dashboard/first-aider" },
           { icon: Ambulance, label: "Assignments", href: "/dashboard/first-aider/assignments" },
-          { icon: Users, label: "Victims", href: "/dashboard/first-aider/victims" },
+          { icon: Users, label: "Patients", href: "/dashboard/first-aider/victims" },
           { icon: Radio, label: "Communications", href: "/dashboard/first-aider/communications" },
           { icon: Heart, label: "Guidance", href: "/dashboard/first-aider/guidance" },
           { icon: History, label: "History", href: "/dashboard/first-aider/history" },
